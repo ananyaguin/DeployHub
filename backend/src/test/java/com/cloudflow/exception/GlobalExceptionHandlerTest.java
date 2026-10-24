@@ -1,6 +1,6 @@
 package com.cloudflow.exception;
 
-import com.cloudflow.dto.ApiError;
+import com.cloudflow.dto.response.ApiError;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -29,6 +29,7 @@ class GlobalExceptionHandlerTest {
                 .andExpect(jsonPath("$.error").value("Not Found"))
                 .andExpect(jsonPath("$.message").value("Resource not found"))
                 .andExpect(jsonPath("$.timestamp").exists())
+                .andExpect(jsonPath("$.errors").doesNotExist())
                 .andExpect(jsonPath("$.trace").doesNotExist())
                 .andExpect(jsonPath("$.exception").doesNotExist())
                 .andExpect(jsonPath("$.path").doesNotExist());

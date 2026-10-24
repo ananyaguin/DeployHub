@@ -195,6 +195,12 @@ Completed 2026-10-24. Entities and repositories map the Flyway tables. `V2__publ
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 7 passed. Worker tests: 1 passed.
 
+## Request and response contracts
+
+Completed 2026-10-24. Request records use Bean Validation. Response records omit passwords, hashes, tokens, and secrets. `ApiError` covers 400, 401, 403, 404, 409, and 500. No resource endpoint returns a success body.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 16 passed. Worker tests: 1 passed.
+
 ## Recommended next step
 
 Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification.

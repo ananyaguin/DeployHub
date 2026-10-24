@@ -1,6 +1,6 @@
 # Architecture
 
-The backend owns the MySQL schema through Flyway. There are no JPA entities yet, and the worker does not migrate the database.
+The backend owns the MySQL schema through Flyway. JPA entities follow that schema. The worker does not migrate the database. Controllers return response records.
 
 ```
 browser  ->  frontend (Vite, React 18)
@@ -21,12 +21,13 @@ Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spri
 | `com.cloudflow.service` | Business operations |
 | `com.cloudflow.entity` | Persistence types |
 | `com.cloudflow.repository` | Spring Data repositories |
-| `com.cloudflow.dto` | Request and response records |
+| `com.cloudflow.dto.request` | Validated client input |
+| `com.cloudflow.dto.response` | Client output, including `ApiError` |
 | `com.cloudflow.security` | Authentication and request security |
 | `com.cloudflow.exception` | API errors |
 | `com.cloudflow.configuration` | Spring configuration outside security and persistence |
 
-`service`, `entity`, `repository`, `security`, `exception`, and `configuration` contain a package marker only. The first real type in each package arrives with the stage that needs it.
+`security` and `configuration` contain a package marker only. The first real type in each package arrives with the stage that needs it.
 
 ## Frontend
 

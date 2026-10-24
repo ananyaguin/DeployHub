@@ -1,12 +1,12 @@
 # CloudFlow implementation plan
 
-Inspection date: 2026-10-23. Workspace: `/Users/AnanyasMac/Desktop/DeployHub`.
+Inspection date: 2026-10-24. Workspace: `/Users/AnanyasMac/Desktop/DeployHub`.
 
-This document records what is actually in the workspace and the order to build CloudFlow. No application code has been generated.
+This document records the 2026-10-24 workspace audit and the order to build CloudFlow. Stage 1 is implemented. The audit sections below describe the empty tree before that scaffold.
 
 ## Workspace verdict
 
-The workspace is empty. It is not a Git repository. There is no existing backend, frontend, worker, database schema, configuration, or documentation other than this file.
+The workspace contains a Git repository and one document. It does not contain an application.
 
 The product name is CloudFlow. The directory name is DeployHub. Keep this directory as the repository root. Do not add a nested `CloudFlow/` folder.
 
@@ -21,50 +21,69 @@ DeployHub/
   .github/workflows/
 ```
 
-## Checks run
+## Files inspected
 
-| Check | Command result |
+| Path | Result |
 | --- | --- |
-| Directory listing | `ls -la` shows only `.` and `..`. Created 2026-10-23 10:03. |
-| All files, including hidden | `find . -mindepth 1` printed nothing before this document. |
-| Git status | `fatal: not a git repository (or any of the parent directories): .git` |
-| Git remote | None. `git remote -v` produced no output. |
-| Git log | None. |
-| `java -version` | Java 24.0.1 (Oracle), `JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-24.jdk/Contents/Home` |
-| `javac -version` | javac 24.0.1 |
-| `/usr/libexec/java_home -V` | 24.0.1 is the default. 17.0.17 is also installed at `/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`. |
-| JDK 17 binary | `java version "17.0.17" 2025-10-21 LTS` when invoked by full path. |
-| `mvn -version` | Apache Maven 3.9.16. It runs on Java 24.0.1, not 17. |
-| `node -v` | v24.18.1 |
-| `npm -v` | 11.16.0 |
-| `git --version` | git version 2.39.5 (Apple Git-154) |
-| `docker --version` | `command not found: docker` |
-| `docker compose version` | `command not found: docker` |
-| `colima`, `podman` | Both missing. |
-| `mysql --version` | Client `Ver 26.7.0` (Homebrew), `/opt/homebrew/bin/mysql` |
-| `mysqld --version` | `Ver 26.7.0`, Homebrew `mysql/26.7.0_2` |
-| MySQL reachability | Socket `/tmp/mysql.sock` exists. `mysqladmin ping` returned `Access denied for user 'root'@'localhost' (using password: NO)`. The server is up. No login was attempted. |
-| `gh` | Not on `PATH`. |
-| `flyway` CLI | Not on `PATH`. Flyway will be a Maven dependency, so a CLI is unnecessary. |
-| Homebrew OpenJDK | `/opt/homebrew/opt/openjdk` points at OpenJDK 26.0.1. It is not the active `JAVA_HOME`. |
+| `/Users/AnanyasMac/Desktop/DeployHub` | Directory listing: `.git/`, `docs/`. No `backend/`, `worker-agent/`, `frontend/`, or `.github/`. |
+| `docs/implementation-plan.md` | Only non-Git file. Previous inspection from 2026-10-23. It said the directory was not a Git repository. That is no longer true. |
+| `git ls-files` | Tracks only `docs/implementation-plan.md`. |
+| `find .` excluding `.git` | Same single file. |
 
-No `pom.xml`, `package.json`, `application.yml`, Flyway migration, controller, service, repository, entity, security class, or frontend route exists, so none of those were opened.
+No `pom.xml`, `package.json`, `application.yml`, `application.properties`, Flyway migration, controller, service, repository, entity, DTO, security class, frontend route, Dockerfile, Compose file, or GitHub Actions workflow exists, so none of those were opened.
+
+## Git
+
+| Check | Result |
+| --- | --- |
+| `git status` | Branch `main`. Working tree clean. |
+| `git branch -vv` | `* main d7d3579` with no upstream. |
+| `git remote -v` | No remote. |
+| `git log -5 --oneline --decorate` | One commit: `d7d3579 (HEAD -> main) docs: add CloudFlow implementation plan`. |
+
+Git was not initialized, reset, or given a remote during this inspection.
+
+## Tool checks
+
+These commands were run on this machine on 2026-10-24.
+
+| Check | Result |
+| --- | --- |
+| `java -version` | Java 24.0.1 (Oracle). `JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-24.jdk/Contents/Home`. |
+| `javac -version` | javac 24.0.1. |
+| `/usr/libexec/java_home -V` | Default is 24.0.1. JDK 17.0.17 is also installed at `/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`. |
+| JDK 17 binary | `java version "17.0.17" 2025-10-21 LTS` when invoked by full path. |
+| `mvn -version` | Apache Maven 3.9.16. It runs on Java 24.0.1, not 17. Maven home: `/opt/homebrew/Cellar/maven/3.9.16/libexec`. |
+| Homebrew OpenJDK | `/opt/homebrew/opt/openjdk` points at OpenJDK 26.0.1. It is not the active `JAVA_HOME`. |
+| `node -v` | v24.18.1 (`/usr/local/bin/node`). |
+| `npm -v` | 11.16.0. |
+| `git --version` | git version 2.39.5 (Apple Git-154). |
+| `docker --version` | `command not found: docker`. |
+| `docker compose version` | `command not found: docker`. |
+| `colima version` | `command not found: colima`. |
+| `podman --version` | `command not found: podman`. |
+| `mysql --version` | Client `Ver 26.7.0` (Homebrew), on `PATH`. |
+| `mysqld --version` | `Ver 26.7.0` at `/opt/homebrew/Cellar/mysql/26.7.0_2/bin/mysqld`. |
+| `mysqladmin ping` | `Access denied for user 'root'@'localhost' (using password: NO)`. The server answered. No password was supplied and no login was attempted. |
+| MySQL socket | `/tmp/mysql.sock` exists. |
+| `gh --version` | `command not found: gh`. |
+| `flyway -v` | `command not found: flyway`. Flyway will be a Maven dependency, so a CLI is unnecessary. |
 
 ## Findings
 
-- No source to preserve, overwrite, or migrate.
-- No dependency conflicts, duplicate classes, or broken imports.
-- No committed secrets, because there are no files.
+- No application source to preserve, overwrite, or migrate.
+- No dependency conflicts, duplicate classes, or broken imports, because there is no source.
+- No committed secrets. The only tracked file is this plan.
 - No security configuration to review.
-- Sibling Desktop folders named `Cloudhub` and `Cloudhub-1` are outside this workspace and were not inspected.
+- Desktop folders named `Cloudhub` and `Cloudhub-1` sit beside this workspace. Their contents were not opened.
 
 ## Risks and missing prerequisites
 
-1. **Default JDK is 24.** Maven will compile with Java 24 unless Stage 1 pins release 17 and points the build at `/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`. JDK 17.0.17 is already installed.
-2. **Host MySQL is 26.7.0, not MySQL 8.** The target is MySQL 8. Do not point CloudFlow at this server until that mismatch is accepted or a MySQL 8 instance exists. No database was created.
+1. **Default JDK is 24.** Maven compiles with Java 24 unless Stage 1 pins release 17 and points the build at `/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home`. JDK 17.0.17 is already installed.
+2. **Database.** A later inspection is recorded in `docs/database.md`. Port 3306 is MySQL 9.3.0. Homebrew 26.7.0 is installed and is not the listening server. The proposed target is MySQL 8.0 or newer, using the 9.3.0 server on this machine. No database was created.
 3. **Docker is not installed.** Compose and a pinned `mysql:8` service are blocked until Docker is installed. Colima and Podman are also absent.
 4. **GitHub CLI is not installed.** Workflow files can still be written locally. Opening pull requests from this machine needs `gh` later.
-5. **No Git repository.** There is no history and no remote. Do not invent a remote. `git init` waits for Stage 1 approval. Commits wait for an explicit commit request.
+5. **No Git remote.** Do not invent one. Commits wait for an explicit commit request.
 
 ## Package rule
 
@@ -77,7 +96,7 @@ When a class is first needed, put it in its own package under `com.cloudflow`:
 - `dto`
 - `security`
 
-Do not add empty packages, one-implementation interfaces, or a parent POM before a second module exists.
+Do not add one-implementation interfaces. The parent POM exists because Stage 1 created both Java modules.
 
 ## Stage order
 
@@ -85,22 +104,23 @@ Each stage stops when its check passes. Later stages are not generated early.
 
 ### Stage 1 — Backend boots on Java 17
 
-- `git init` in this directory. No remote.
+Git already exists on `main` with no remote. Do not run `git init` again and do not add a remote.
+
 - Root `.gitignore` for Maven, Node, IDE files, and `.env`.
 - `backend/` Maven project: Spring Boot 3.5.x (exact patch taken from Maven Central at implementation time), `spring-boot-starter-web`, `spring-boot-starter-validation`, `spring-boot-starter-test`.
 - Compiler release 17, JDK 17 toolchain. One application class and a health endpoint.
 - Check: `mvn -version` during the build shows Java 17, `mvn test` passes, and the application starts.
 
-Deferred: JPA, Security, JWT, Flyway, MySQL, worker, frontend, Compose, Actions.
+Stage 1, as built, also includes the worker module shell, the React shell, and repository docs. Still deferred: JPA, Security, JWT, Flyway, MySQL, job execution, Compose, Actions.
 
-### Stage 2 — MySQL 8 and Flyway
+### Stage 2 — MySQL and Flyway
 
-Blocked until a MySQL 8 instance is available. Preferred source is Compose `mysql:8` after Docker exists. Host MySQL 26.7.0 is not a silent substitute.
+Waiting for approval of `docs/database.md`. The proposed server is the MySQL 9.3.0 instance already listening on port 3306, with Spring Boot's Connector/J 9.7.0. Any MySQL 8.0 or newer server is acceptable. MySQL 8 is not a separate prerequisite.
 
-- Add `spring-boot-starter-data-jpa`, Flyway, and the MySQL driver.
+- Add `spring-boot-starter-data-jpa`, Flyway, and `mysql-connector-j` at the Spring Boot 3.5.16 managed versions.
 - Credentials only from environment variables. Commit an example env file with placeholders.
-- First migration and the first entity/repository pair only for the first real table.
-- Check: application starts, Flyway applies, a repository test or a single SQL smoke check passes against MySQL 8.
+- First migration uses portable SQL: InnoDB, `utf8mb4`, and no version-specific syntax.
+- Check: application starts, Flyway applies, and a repository test or one SQL smoke check passes against the configured server.
 
 ### Stage 3 — Security and JWT
 
@@ -118,30 +138,43 @@ Blocked until a MySQL 8 instance is available. Preferred source is Compose `mysq
 
 ### Stage 5 — Worker agent
 
-- New `worker-agent/` Maven module on Java 17. Separate process, same MySQL database.
-- Claims one queued job and updates its status. Add a parent POM only at this point to share the Java and dependency versions.
+- The `worker-agent/` module and the parent POM already exist. This stage adds the job loop: claim one queued job and update its status. Same MySQL database, separate process.
 - Check: a queued row transitions when the worker runs; the backend test suite still passes.
 
 ### Stage 6 — Frontend
 
-- `frontend/` with Vite, React 18, JavaScript and JSX only.
-- Login and a jobs page that call the Stage 4 API.
+- The Vite and React 18 shell already exists. This stage adds login and a jobs page that call the Stage 4 API.
 - Check: production build succeeds, and the login-to-job-list path works in a browser against the running backend.
 
 ### Stage 7 — Docker Compose
 
 Blocked until Docker is installed.
 
-- Services: MySQL 8, backend, worker-agent, frontend.
-- Check: `docker compose up` brings up MySQL 8 and the Stage 6 path works against the containers.
+- Services: MySQL 8.0 or newer, backend, worker-agent, frontend.
+- Check: `docker compose up` brings up the database service and the Stage 6 path works against the containers.
 
 ### Stage 8 — GitHub Actions
 
 - Workflow runs backend tests on Temurin 17 and the frontend build.
 - Check: the workflow file is valid YAML and a push to a real remote shows the jobs green. Local presence of the file alone is not a passing check.
 
+## Stage 1 result
+
+Completed 2026-10-24. Git `main` was left in place. `git remote -v` still prints nothing.
+
+| Check | Result |
+| --- | --- |
+| `mvn -version` with `JAVA_HOME` set to JDK 17 | Java version 17.0.17, Maven 3.9.16 |
+| `mvn verify` | BUILD SUCCESS. Reactor: `cloudflow`, `cloudflow-backend`, `cloudflow-worker-agent`. Compiler `release 17`. |
+| Backend test | `HealthControllerTest`: Tests run: 1, Failures: 0 |
+| Worker test | `WorkerAgentApplicationTest`: Tests run: 1, Failures: 0. The Spring context started. |
+| `npm install` in `frontend/` | 264 packages added, 0 vulnerabilities |
+| `npm run build` | Vite 8.3.5 production build succeeded |
+| `npm run lint` | ESLint finished with no findings |
+| Browser | `http://127.0.0.1:5173/` rendered the CloudFlow shell, title CloudFlow, API `http://localhost:8080`, health `http://localhost:8080/api/health` |
+
+`spring-boot:run` was not left running. The health check that passed is the MockMvc test inside `mvn verify`.
+
 ## Recommended next step
 
-Approve Stage 1 only: initialize Git with no remote, add `.gitignore`, and add a Java 17 Spring Boot backend that starts and exposes health.
-
-Do not start Stage 2 until MySQL 8 is available. Do not start Stage 7 until Docker is installed.
+Stop. Stage 2 waits for approval of the database plan in `docs/database.md`. Stage 7 stays blocked until Docker is installed.

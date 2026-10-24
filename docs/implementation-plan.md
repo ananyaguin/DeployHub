@@ -189,6 +189,12 @@ Completed 2026-10-24 as the MySQL 8 and Flyway stage. `V1__initial_schema.sql` i
 
 Migrations were not applied. MySQL 8 is not installed. The process on port 3306 is MySQL 9.3.0 and rejected `root` with no password. No datasource password was set in the environment. Flyway status was not queried.
 
+## JPA model
+
+Completed 2026-10-24. Entities and repositories map the Flyway tables. `V2__public_ids_and_task_fields.sql` adds public ids plus `users.role` and `executions.task_type`. Hibernate still does not create the schema. Repository query tests were not run because no MySQL 8 database was available.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 7 passed. Worker tests: 1 passed.
+
 ## Recommended next step
 
-Stop. Wait for approval before Stage 4. Do not treat the MySQL 9.3.0 server as the MySQL 8 verification.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification.

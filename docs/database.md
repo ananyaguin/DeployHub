@@ -124,19 +124,21 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 
 ## Schema
 
-`backend/src/main/resources/db/migration/V1__initial_schema.sql` creates twelve tables. Keys are `BIGINT UNSIGNED`. Timestamps are `DATETIME(6)`. The JDBC session time zone is UTC.
+`V1__initial_schema.sql` creates twelve tables. Keys are `BIGINT UNSIGNED`. Timestamps are `DATETIME(6)`. The JDBC session time zone is UTC.
+
+`V2__public_ids_and_task_fields.sql` adds a `CHAR(36)` `public_id` on tenants, users, deployments, deployment versions, executions, and worker nodes. It also adds `users.role` and `executions.task_type`. Internal keys stay numeric. V1 was not edited. Neither migration has been applied on this machine.
 
 | Table | Owned by | Notes |
 | --- | --- | --- |
 | `tenants` | — | `slug` is unique. |
-| `users` | tenant, cascade delete | One tenant per user. Email is unique inside the tenant. `password_hash` is required. |
+| `users` | tenant, cascade delete | One tenant per user. Email is unique inside the tenant. `password_hash` is required. Role is `OWNER`, `ADMIN`, or `MEMBER`. |
 | `email_verification_tokens` | user, cascade delete | `token_hash` is unique SHA-256 hex. `used_at` null means unused. |
 | `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
 | `worker_nodes` | global | No tenant. Status `ONLINE` or `OFFLINE`. |
 | `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. |
 | `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. |
 | `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
-| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. |
+| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. |
 | `execution_logs` | execution, cascade delete | Unique `(execution_id, sequence_no)` is the read index. |
 | `notification_preferences` | user, cascade delete | One row per user. `email_enabled` only. |
 | `notification_deliveries` | user, cascade delete | Optional execution; execution delete sets that id null. Channel `EMAIL`. Status `PENDING`, `SENT`, or `FAILED`. |

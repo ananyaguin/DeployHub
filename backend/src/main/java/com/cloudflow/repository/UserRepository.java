@@ -5,9 +5,13 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    @EntityGraph(attributePaths = "tenant")
+    Optional<User> findByPublicId(UUID publicId);
 
     Page<User> findByTenant_Id(Long tenantId, Pageable pageable);
 

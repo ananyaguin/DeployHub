@@ -1,6 +1,5 @@
 package com.cloudflow.exception;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -43,9 +42,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         return status(HttpStatus.UNAUTHORIZED);
     }
 
+    @ExceptionHandler(AuthenticationFailedException.class)
+    public ResponseEntity<ApiError> handleAuthenticationFailed(AuthenticationFailedException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiErrors.of(HttpStatus.UNAUTHORIZED, "Authentication failed"));
+    }
+
     @ExceptionHandler(ForbiddenException.class)
     public ResponseEntity<ApiError> handleForbidden(ForbiddenException ex) {
         return status(HttpStatus.FORBIDDEN);
+    }
+
+    @ExceptionHandler(EmailNotVerifiedException.class)
+    public ResponseEntity<ApiError> handleUnverified(EmailNotVerifiedException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiErrors.of(HttpStatus.FORBIDDEN, "Email verification required"));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
@@ -56,7 +67,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(BindException.class)
     public ResponseEntity<ApiError> handleBinding(BindException ex) {
-        return ResponseEntity.badRequest().body(apiError(HttpStatus.BAD_REQUEST, messages(ex)));
+        return ResponseEntity.badRequest().body(ApiErrors.of(HttpStatus.BAD_REQUEST, messages(ex)));
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
@@ -64,7 +75,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         List<String> errors = ex.getConstraintViolations().stream()
                 .map(violation -> leaf(violation.getPropertyPath().toString()) + ": " + violation.getMessage())
                 .toList();
-        return ResponseEntity.badRequest().body(apiError(HttpStatus.BAD_REQUEST, errors));
+        return ResponseEntity.badRequest().body(ApiErrors.of(HttpStatus.BAD_REQUEST, errors));
     }
 
     @ExceptionHandler(Exception.class)
@@ -76,7 +87,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleMethodArgumentNotValid(
             MethodArgumentNotValidException ex, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        return ResponseEntity.badRequest().body(apiError(HttpStatus.BAD_REQUEST, messages(ex)));
+        return ResponseEntity.badRequest().body(ApiErrors.of(HttpStatus.BAD_REQUEST, messages(ex)));
     }
 
     @Override
@@ -90,7 +101,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                             .map(error -> field + ": " + text(error.getDefaultMessage()));
                 })
                 .toList();
-        return ResponseEntity.badRequest().body(apiError(HttpStatus.BAD_REQUEST, errors));
+        return ResponseEntity.badRequest().body(ApiErrors.of(HttpStatus.BAD_REQUEST, errors));
     }
 
     @Override
@@ -100,11 +111,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             log.error("Request failed", ex);
         }
         HttpHeaders safeHeaders = headers == null ? new HttpHeaders() : headers;
-        return new ResponseEntity<>(apiError(status, List.of()), safeHeaders, status);
+        return new ResponseEntity<>(ApiErrors.of(status, List.of()), safeHeaders, status);
     }
 
     private static ResponseEntity<ApiError> status(HttpStatus status) {
-        return ResponseEntity.status(status).body(apiError(status, List.of()));
+        return ResponseEntity.status(status).body(ApiErrors.of(status));
     }
 
     private static List<String> messages(BindException ex) {
@@ -125,33 +136,5 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static String text(String message) {
         return message == null ? "is invalid" : message;
-    }
-
-    private static ApiError apiError(HttpStatusCode status, List<String> errors) {
-        HttpStatus resolved = HttpStatus.resolve(status.value());
-        String error = resolved == null ? "Error" : resolved.getReasonPhrase();
-        return new ApiError(status.value(), error, publicMessage(status), Instant.now(), errors);
-    }
-
-    private static String publicMessage(HttpStatusCode status) {
-        if (status.value() == HttpStatus.BAD_REQUEST.value()) {
-            return "Request could not be processed";
-        }
-        if (status.value() == HttpStatus.UNAUTHORIZED.value()) {
-            return "Authentication required";
-        }
-        if (status.value() == HttpStatus.FORBIDDEN.value()) {
-            return "Operation not permitted";
-        }
-        if (status.value() == HttpStatus.NOT_FOUND.value()) {
-            return "Resource not found";
-        }
-        if (status.value() == HttpStatus.CONFLICT.value()) {
-            return "Resource already exists";
-        }
-        if (status.is4xxClientError()) {
-            return "Request could not be processed";
-        }
-        return "Unexpected error";
     }
 }

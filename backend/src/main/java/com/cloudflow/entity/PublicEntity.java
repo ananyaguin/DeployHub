@@ -18,11 +18,15 @@ public abstract class PublicEntity extends IdentifiedEntity {
             columnDefinition = "char(36) character set ascii collate ascii_bin")
     private UUID publicId;
 
-    @PrePersist
-    void assignPublicId() {
+    public void assignIdentity() {
         if (publicId == null) {
             publicId = UUID.randomUUID();
         }
+    }
+
+    @PrePersist
+    void assignPublicId() {
+        assignIdentity();
     }
 
     public UUID getPublicId() {

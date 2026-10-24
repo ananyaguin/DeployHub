@@ -11,3 +11,12 @@ spring:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
       - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
       - org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration
+
+cloudflow:
+  security:
+    jwt:
+      secret: test-only-jwt-secret-must-be-32-bytes!!
+      expiration: 15m
+    require-verified-email: true
+    cors-allowed-origins: http://localhost:5173
+    worker-token: test-worker-token

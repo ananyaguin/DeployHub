@@ -50,3 +50,12 @@ logging:
   level:
     root: INFO
     com.cloudflow: INFO
+
+cloudflow:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      expiration: ${JWT_EXPIRATION:15m}
+    require-verified-email: ${REQUIRE_VERIFIED_EMAIL:true}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    worker-token: ${WORKER_TOKEN:}

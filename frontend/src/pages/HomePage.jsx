@@ -19,7 +19,7 @@ export function HomePage() {
         </div>
         <div>
           <dt>Health</dt>
-          <dd>{apiUrl('/api/health')}</dd>
+          <dd>{apiUrl('/api/v1/health')}</dd>
         </div>
       </dl>
     </section>

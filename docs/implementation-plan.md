@@ -175,6 +175,12 @@ Completed 2026-10-24. Git `main` was left in place. `git remote -v` still prints
 
 `spring-boot:run` was not left running. The health check that passed is the MockMvc test inside `mvn verify`.
 
+## API foundation
+
+Completed 2026-10-24 after the database plan, and before any database code. `GET /api/v1/health` and `GET /actuator/health` return `{"status":"UP"}`. Unknown paths return `ApiError` with no stack trace. `mvn verify` on JDK 17 passed: backend tests 4, worker tests 1. The jar was started with Java 17.0.17 on port 8080, the default profile, and then stopped. `dev` and `prod` profile files are present and were not booted on their own.
+
+The database stage below is still waiting for approval. It was not started.
+
 ## Recommended next step
 
-Stop. Stage 2 waits for approval of the database plan in `docs/database.md`. Stage 7 stays blocked until Docker is installed.
+Stop. Database setup still waits for approval of `docs/database.md`. Stage 7 stays blocked until Docker is installed.

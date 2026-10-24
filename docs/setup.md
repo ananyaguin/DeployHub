@@ -20,7 +20,7 @@ Run the API:
 mvn -pl backend spring-boot:run
 ```
 
-Health check: `curl -s http://localhost:8080/api/health`
+Health check: `curl -s http://localhost:8080/api/v1/health`
 
 Run the worker:
 

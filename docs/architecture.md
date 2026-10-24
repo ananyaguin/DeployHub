@@ -6,7 +6,7 @@ Stage 1 establishes three processes and the package boundaries. It does not impl
 browser  ->  frontend (Vite, React 18)
                 |
                 v
-         cloudflow-backend   GET /api/health
+         cloudflow-backend   GET /api/v1/health
          cloudflow-worker-agent   separate JVM, no queue yet
 ```
 

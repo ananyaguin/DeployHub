@@ -37,7 +37,7 @@ npm install
 npm run dev
 ```
 
-The API listens on port 8080. `GET /api/health` returns `{"status":"UP"}`. The frontend dev server listens on port 5173.
+The API listens on port 8080. `GET /api/v1/health` returns `{"status":"UP"}`. Actuator health is `GET /actuator/health`. Set `SPRING_PROFILES_ACTIVE` to `dev` or `prod` when you want that profile. The frontend dev server listens on port 5173.
 
 `npm run build` writes `frontend/dist`. `npm run lint` checks `frontend/src`.
 

@@ -21,7 +21,7 @@ Backend packages under `com.cloudflow` stay separate: `controller`, `service`, `
 - Maven 3.9 or newer.
 - Node.js 20.19+ or 22.12+, with npm. Vite 8 does not support older Node 20 releases.
 
-The database is not wired in this stage. The compatibility plan is in `docs/database.md`: MySQL 8.0 or newer, with Connector/J 9.7.0 from Spring Boot 3.5.16. This machine's server on port 3306 is MySQL 9.3.0.
+MySQL 8 and Flyway are configured on the backend. Setup, the schema, and local credentials are in `docs/database.md`. Java stays on 17. Spring Boot stays on 3.5.16.
 
 ## Run
 

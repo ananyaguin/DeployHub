@@ -1,73 +1,152 @@
-# Database compatibility
+# Database
 
-Inspection date: 2026-10-24. No JDBC driver, datasource, or migration has been added. This is the choice to approve before Stage 2.
+The backend uses MySQL 8 and Flyway. Java is 17. Spring Boot is 3.5.16, which manages Connector/J 9.7.0, Flyway 11.7.2, and Hibernate 6.6.53. Hibernate `ddl-auto` is `none`. Flyway owns the schema. The worker does not.
 
-## What is installed
+No passwords belong in source, profiles, or this document.
 
-Two MySQL servers are on this machine. Only one is accepting connections.
+## This machine
 
-| Install | Binary | Version | State |
-| --- | --- | --- | --- |
-| Official package | `/usr/local/mysql/bin/mysqld` | **9.3.0** Community, Innovation, protocol 10 | Running as `_mysql` since 2026-09-04 (pid 559). `mysqladmin --protocol=TCP -h 127.0.0.1 -P 3306 ping` reached it and returned `Access denied` for `root` with no password. |
-| Homebrew | `/opt/homebrew/opt/mysql/bin/mysqld` | **26.7.0** Innovation. `mysql_version.h` names 9.7.0 as the previous LTS. | Not the server on port 3306. Its error log says bind failed because port 3306 is already in use, then the process aborted. `brew services` lists the formula as stopped. |
+Checked on 2026-10-24:
 
-The `mysql` client on `PATH` is Homebrew 26.7.0. It can speak to the 9.3.0 server far enough to receive an authentication error. No password was supplied, and no login succeeded. No database or user was created.
-
-CloudFlow has no MySQL dependency yet. `backend/pom.xml` does not declare a JDBC driver. The driver version below is the one Spring Boot 3.5.16 would manage if the dependency is added later.
-
-## Driver and server floor
-
-From the local Maven cache of `spring-boot-dependencies` 3.5.16:
-
-| Component | Version | Constraint |
+| Install | Version | Result |
 | --- | --- | --- |
-| `com.mysql:mysql-connector-j` | **9.7.0** | Managed by the Spring Boot 3.5.16 BOM. Released 2026-03-18. |
-| Flyway | 11.7.2 | Managed by the same BOM. Not on the classpath yet. |
-| Hibernate ORM | 6.6.53.Final | `MySQLDialect` sets `MINIMUM_VERSION` to `DatabaseVersion.make(8)`, so MySQL 8.0 is the oldest server Hibernate will accept. |
+| `/usr/local/mysql` | 9.3.0 | Answers on port 3306. `root` with no password is rejected. |
+| Homebrew `mysql` | 26.7.0 | Installed. It does not hold port 3306. |
+| Homebrew `mysql@8.0` and `mysql@8.4` | — | Not installed. |
+| Docker | — | Not installed. |
 
-Connector/J 9.7.0 and 26.7.0 were both read from Maven Central. The 9.7.0 driver parses a server version as major.minor.patch and treats every check as a minimum. MySQL 9.3.0 passes those 8.0 minimum checks. The 26.7.0 driver is a newer line that matches the Homebrew server, which is not the server listening on 3306.
+Migrations were not applied. There is no MySQL 8 server here, and no datasource password was available. Do not point CloudFlow at the 9.3.0 server and call that MySQL 8.
 
-MySQL 5.7 is below Hibernate's minimum and is end of life. It is not a target.
+## Install MySQL 8 locally
 
-## Proposed choice
+Homebrew can install MySQL 8.4 without Docker. On this Mac, port 3306 is already taken, so use 3307.
 
-Use the running **MySQL 9.3.0** server on `127.0.0.1:3306` with Spring Boot's managed **Connector/J 9.7.0**. Do not override the driver version. Do not install another server for this desktop.
-
-That pair is safe to propose because:
-
-- 9.3.0 is newer than Hibernate's MySQL 8.0 floor and older than driver 9.7.0.
-- The driver and the server both use protocol 10.
-- Java 17 and Spring Boot 3.5.16 stay as they are.
-
-Other desktops can use another MySQL 8.0 or newer server. Homebrew on this Mac also offers `mysql@8.0`, `mysql@8.4`, and `mysql@9.7`. Those are optional elsewhere. They are not required here, and starting one of them on this Mac would collide with port 3306.
-
-Homebrew MySQL 26.7.0 is a valid newer server, but it is not the one CloudFlow can reach today. Using it would mean stopping the 9.3.0 service and overriding the JDBC driver to `mysql-connector-j` 26.7.0. That is a larger change than this desktop needs.
-
-## Connection
-
-Stage 2, after approval, should read only these environment variables:
-
-```
-SPRING_DATASOURCE_URL=jdbc:mysql://127.0.0.1:3306/cloudflow
-SPRING_DATASOURCE_USERNAME=cloudflow
-SPRING_DATASOURCE_PASSWORD=change-me
+```bash
+brew install mysql@8.4
 ```
 
-Create a database named `cloudflow` and a user that can use only that database. Keep the password out of Git. Do not point the application at `root`. Spring Boot maps those variable names onto the datasource. `.env.example` would gain these placeholders only when Stage 2 is approved. The file does not contain them yet.
+Create a config file, for example `~/cloudflow-mysql8.cnf`:
 
-## Migrations
+```ini
+[mysqld]
+port=3307
+mysqlx=0
+socket=/tmp/cloudflow-mysql8.sock
+datadir=/opt/homebrew/var/mysql@8.4
+```
 
-Flyway SQL should stay inside the MySQL 8.0 feature set so 8.0, 8.4, 9.3, and 9.7 can apply the same scripts:
+Start it:
 
-- `InnoDB` and `utf8mb4`, with the server's default collation
-- integer keys, `varchar`, `datetime`, and ordinary indexes
-- no version-specific syntax, stored programs, or MySQL 9-only features
+```bash
+$(brew --prefix mysql@8.4)/bin/mysqld --defaults-file=$HOME/cloudflow-mysql8.cnf --bind-address=127.0.0.1
+```
 
-## Changes that wait for approval
+A machine where port 3306 is free can use the formula's normal service and port 3306 instead.
 
-1. Add `spring-boot-starter-data-jpa`, `flyway-core`, `flyway-mysql`, and `mysql-connector-j` to `cloudflow-backend`, with versions taken from the Spring Boot 3.5.16 BOM.
-2. Add the three datasource placeholders to `.env.example`.
-3. Point the backend datasource at those environment variables.
-4. Add the first portable Flyway migration when the first table exists.
+## Database and user
 
-No dependency, configuration, or migration was changed for this document.
+Run the following as an administrator against the MySQL 8 instance. Replace the password locally. Do not commit it.
+
+```sql
+CREATE DATABASE cloudflow CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+CREATE USER 'cloudflow'@'127.0.0.1' IDENTIFIED BY 'choose-a-local-password';
+GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
+    ON cloudflow.* TO 'cloudflow'@'127.0.0.1';
+```
+
+The account can change the `cloudflow` schema and its rows. It is not a global administrator. It does not have `DROP`.
+
+## Environment
+
+Spring Boot reads the process environment. It does not load `.env` by itself. From the repository root:
+
+```bash
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+export SPRING_DATASOURCE_URL='jdbc:mysql://127.0.0.1:3307/cloudflow?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true'
+export SPRING_DATASOURCE_USERNAME=cloudflow
+export SPRING_DATASOURCE_PASSWORD='choose-a-local-password'
+```
+
+Use port 3306 in the URL when that is the MySQL 8 port. Keep the password in `SPRING_DATASOURCE_PASSWORD`, not in the URL. `.env.example` lists the same names with placeholders. `.env` is gitignored.
+
+Production should use a different user and password, supplied by the process environment or a secret store. `application-prod.yml` only changes log levels.
+
+## Run migrations
+
+Flyway runs when the backend starts. `clean` is disabled. Validation is on. There is no baseline that hides an existing schema.
+
+```bash
+mvn -pl backend spring-boot:run
+```
+
+A successful start logs Flyway applying `1` or validating it. Then:
+
+```bash
+curl -s http://127.0.0.1:8080/api/v1/health
+```
+
+## Check status
+
+As the `cloudflow` user:
+
+```sql
+SELECT installed_rank, version, description, success, checksum
+FROM flyway_schema_history;
+```
+
+`success` must be `1` for version `1`. If the backend is already running, its log is the other check. Do not turn validation off to hide a checksum mismatch.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| Connection refused | The MySQL 8 process is down, or the URL port does not match it. Port 3306 on this Mac is the other server. |
+| Access denied | User, host (`127.0.0.1`), or password does not match. The password is the environment variable, not a value from Git. |
+| Unknown database | `CREATE DATABASE cloudflow` has not been run on that server. |
+| Migration failed | Read the Flyway error. Add a new versioned migration for a later correction. Do not edit `V1__initial_schema.sql` after it has been applied. |
+| Checksum mismatch | A migration file changed after it was applied. Restore the file. Do not use repair to bless an edited applied migration. |
+| Placeholder could not be resolved | `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, or `SPRING_DATASOURCE_PASSWORD` is missing from the environment. |
+
+The backend log can include the JDBC URL. It must not include the password. Health responses do not include datasource settings.
+
+## Reset a disposable development database
+
+This deletes the local `cloudflow` database. Do this only on a development server you can throw away. Do not run it in production.
+
+As an administrator:
+
+```sql
+DROP DATABASE cloudflow;
+CREATE DATABASE cloudflow CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+```
+
+Start the backend again. Flyway applies `V1` to the empty database. The application user still has no `DROP` grant, which is why an administrator runs the reset.
+
+## Schema
+
+`backend/src/main/resources/db/migration/V1__initial_schema.sql` creates twelve tables. Keys are `BIGINT UNSIGNED`. Timestamps are `DATETIME(6)`. The JDBC session time zone is UTC.
+
+| Table | Owned by | Notes |
+| --- | --- | --- |
+| `tenants` | — | `slug` is unique. |
+| `users` | tenant, cascade delete | One tenant per user. Email is unique inside the tenant. `password_hash` is required. |
+| `email_verification_tokens` | user, cascade delete | `token_hash` is unique SHA-256 hex. `used_at` null means unused. |
+| `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
+| `worker_nodes` | global | No tenant. Status `ONLINE` or `OFFLINE`. |
+| `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. |
+| `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. |
+| `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
+| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. |
+| `execution_logs` | execution, cascade delete | Unique `(execution_id, sequence_no)` is the read index. |
+| `notification_preferences` | user, cascade delete | One row per user. `email_enabled` only. |
+| `notification_deliveries` | user, cascade delete | Optional execution; execution delete sets that id null. Channel `EMAIL`. Status `PENDING`, `SENT`, or `FAILED`. |
+
+Assumptions kept small on purpose:
+
+- Accounts are local password accounts. There is no external-identity table.
+- A person who works in two tenants has two user rows.
+- Deployment source artifacts, environment variables, and schedules are not columns yet.
+- Notification preferences cover email only.
+- A delivery may exist before it is tied to an execution.
+
+No JPA entities were added for these tables.

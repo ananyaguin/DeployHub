@@ -45,11 +45,11 @@ npm run lint
 
 Vite loads environment files from the repository root (`envDir` is `..`). The only variable is `VITE_API_BASE_URL`.
 
-## Not used in this stage
+## Not built yet
 
-- MySQL, Flyway, and JPA
 - Spring Security and JWT
+- Deployment APIs and the worker job loop
 - Docker Compose
 - GitHub Actions
 
-Database choice and local setup are in `docs/database.md`. The server listening on port 3306 is MySQL 9.3.0. Homebrew MySQL 26.7.0 is installed and does not hold that port. Docker is not installed.
+Database setup is in `docs/database.md`. Hibernate does not create tables. Flyway does, from `backend/src/main/resources/db/migration`.

@@ -1,6 +1,6 @@
 # Architecture
 
-Stage 1 establishes three processes and the package boundaries. It does not implement deployments, accounts, or persistence.
+The backend owns the MySQL schema through Flyway. There are no JPA entities yet, and the worker does not migrate the database.
 
 ```
 browser  ->  frontend (Vite, React 18)

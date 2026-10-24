@@ -179,8 +179,16 @@ Completed 2026-10-24. Git `main` was left in place. `git remote -v` still prints
 
 Completed 2026-10-24 after the database plan, and before any database code. `GET /api/v1/health` and `GET /actuator/health` return `{"status":"UP"}`. Unknown paths return `ApiError` with no stack trace. `mvn verify` on JDK 17 passed: backend tests 4, worker tests 1. The jar was started with Java 17.0.17 on port 8080, the default profile, and then stopped. `dev` and `prod` profile files are present and were not booted on their own.
 
-The database stage below is still waiting for approval. It was not started.
+The database schema stage is recorded in the next section. It was not started when this API note was written.
+
+## Database foundation
+
+Completed 2026-10-24 as the MySQL 8 and Flyway stage. `V1__initial_schema.sql` is the only migration. Hibernate `ddl-auto` is `none`. The worker does not migrate.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 4 passed, including health and the error handler. Worker tests: 1 passed. Those tests do not open a database.
+
+Migrations were not applied. MySQL 8 is not installed. The process on port 3306 is MySQL 9.3.0 and rejected `root` with no password. No datasource password was set in the environment. Flyway status was not queried.
 
 ## Recommended next step
 
-Stop. Database setup still waits for approval of `docs/database.md`. Stage 7 stays blocked until Docker is installed.
+Stop. Wait for approval before Stage 4. Do not treat the MySQL 9.3.0 server as the MySQL 8 verification.

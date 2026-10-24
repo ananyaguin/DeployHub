@@ -6,7 +6,7 @@ The backend owns the MySQL schema through Flyway. JPA entities follow that schem
 browser  ->  frontend (Vite, React 18)
                 |
                 v
-         cloudflow-backend   GET /api/v1/health
+         cloudflow-backend   health, registration, login, tenant-scoped reads
          cloudflow-worker-agent   separate JVM, no queue yet
 ```
 
@@ -27,7 +27,7 @@ Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spri
 | `com.cloudflow.exception` | API errors |
 | `com.cloudflow.configuration` | Spring configuration outside security and persistence |
 
-`security` and `configuration` contain a package marker only. The first real type in each package arrives with the stage that needs it.
+`configuration` contains a package marker only. Authentication decisions are in `docs/security.md`.
 
 ## Frontend
 

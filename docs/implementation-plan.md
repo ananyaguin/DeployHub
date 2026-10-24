@@ -201,6 +201,12 @@ Completed 2026-10-24. Request records use Bean Validation. Response records omit
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 16 passed. Worker tests: 1 passed.
 
+## Authentication and tenant isolation
+
+Completed 2026-10-24. `POST /api/v1/auth/register` creates a tenant and an unverified OWNER. `POST /api/v1/auth/login` returns a 15-minute HS256 access token when the password matches and the account is verified. The signing secret is `JWT_SECRET` with no default. There is no refresh token and no server-side revocation list. Worker calls use `Authorization: Worker <WORKER_TOKEN>` on a separate filter chain. Resource reads take the tenant from the authenticated user. Another tenant's resource is a 404. Email delivery is not implemented.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 29 passed. Worker tests: 1 passed. Those tests do not open a database. Migrations were not applied.
+
 ## Recommended next step
 
-Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start email delivery until that stage is requested.

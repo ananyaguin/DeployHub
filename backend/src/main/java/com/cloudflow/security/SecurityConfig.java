@@ -1,12 +1,15 @@
 package com.cloudflow.security;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.util.List;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 
 import com.cloudflow.security.worker.WorkerTokenFilter;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -29,9 +32,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.time.Clock;
-import java.util.List;
 
 @Configuration
 @EnableConfigurationProperties(SecurityProperties.class)
@@ -68,8 +68,9 @@ public class SecurityConfig {
 
     @Bean
     @Order(1)
-    SecurityFilterChain workerChain(HttpSecurity http, WorkerTokenFilter workerTokens, ApiErrorWriter errors)
+    SecurityFilterChain workerChain(HttpSecurity http, SecurityProperties properties, ApiErrorWriter errors)
             throws Exception {
+        WorkerTokenFilter workerTokens = new WorkerTokenFilter(properties, errors);
         return http.securityMatcher("/api/v1/worker/**")
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -87,7 +88,7 @@ public class SecurityConfig {
             HttpSecurity http,
             UserAuthenticationConverter users,
             ApiErrorWriter errors,
-            CorsConfigurationSource cors)
+            @Qualifier("corsConfigurationSource") CorsConfigurationSource cors)
             throws Exception {
         return http.csrf(AbstractHttpConfigurer::disable)
                 .cors(config -> config.configurationSource(cors))

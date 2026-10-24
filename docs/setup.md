@@ -47,8 +47,8 @@ Vite loads environment files from the repository root (`envDir` is `..`). The on
 
 ## Not built yet
 
-- Spring Security and JWT
-- Deployment APIs and the worker job loop
+- Email verification delivery
+- The worker job loop
 - Docker Compose
 - GitHub Actions
 

@@ -1,6 +1,6 @@
 # DeployHub
 
-Deployment and job orchestration. This repository is the Stage 1 scaffold: a Java 17 backend, a Java 17 worker process, and a React shell. Jobs, accounts, and the database are not built yet.
+Deployment and job orchestration. The backend registers and logs in users, then scopes reads to the caller's tenant. Token rules are in `docs/security.md`.
 
 The product name is CloudFlow. The directory name is DeployHub. This directory is the repository root.
 

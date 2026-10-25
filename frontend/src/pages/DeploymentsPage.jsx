@@ -52,13 +52,12 @@ export function DeploymentsPage() {
     <section>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Deployments</p>
-          <h1>Your tenant</h1>
+          <h1>Deployments</h1>
         </div>
         <button type="button" className="ghost" onClick={load}>Refresh</button>
       </div>
       <Alert>{error}</Alert>
-      <form className="panel form create-form" onSubmit={submit}>
+      <form className="panel form" onSubmit={submit} noValidate>
         <h2>Create a deployment</h2>
         <div className="split">
           <Field label="Name" name="name" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
@@ -66,7 +65,7 @@ export function DeploymentsPage() {
         </div>
         <button type="submit" disabled={pending}>{pending ? 'Creating…' : 'Create deployment'}</button>
       </form>
-      {rows == null ? <p className="muted">Loading deployments…</p> : null}
+      {rows == null && !error ? <p className="muted">Loading deployments…</p> : null}
       {rows && rows.total === 0 ? <p className="panel muted">No deployments in this tenant yet.</p> : null}
       {rows && rows.items?.length > 0 ? (
         <div className="table-wrap panel">

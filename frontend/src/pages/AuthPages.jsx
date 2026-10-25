@@ -45,21 +45,25 @@ export function LoginPage() {
   }
 
   return (
-    <section className="panel narrow">
-      <p className="eyebrow">DeployHub</p>
+    <section className="panel narrow auth">
       <h1>Sign in</h1>
-      <p className="lede">Use the tenant slug from registration. Access is decided by the API, not by a tenant id in the browser.</p>
-      <form className="form" onSubmit={submit}>
+      <form className="form" onSubmit={submit} noValidate>
         <Alert>{error}</Alert>
-        <Field label="Tenant slug" name="tenantSlug" value={form.tenantSlug} onChange={update} autoComplete="organization" required />
+        <Field label="Tenant slug" name="tenantSlug" hint="Lowercase slug from registration." value={form.tenantSlug} onChange={update} autoComplete="organization" required />
         <Field label="Email" name="email" type="email" value={form.email} onChange={update} autoComplete="username" required />
         <Field label="Password" name="password" type="password" value={form.password} onChange={update} autoComplete="current-password" required />
         <button type="submit" disabled={pending}>{pending ? 'Signing in…' : 'Sign in'}</button>
       </form>
-      <p className="links">
-        <a href="/register" onClick={followLink}>Create an account</a>
-        <a href="/reset-password" onClick={followLink}>Reset password</a>
-      </p>
+      <div className="auth-choices">
+        <a href="/register" onClick={followLink}>
+          <span>Create an account</span>
+          <small>New tenant</small>
+        </a>
+        <a href="/reset-password" onClick={followLink}>
+          <span>Reset password</span>
+          <small>Email a link</small>
+        </a>
+      </div>
     </section>
   )
 }
@@ -96,16 +100,15 @@ export function RegisterPage() {
   }
 
   return (
-    <section className="panel narrow">
-      <p className="eyebrow">DeployHub</p>
+    <section className="panel narrow auth">
       <h1>Create an account</h1>
       {done ? (
         <>
-          <Alert tone="ok">Account created. Verify the email before signing in. If mail is not configured, the API reports that the message could not be sent.</Alert>
+          <Alert tone="ok">Account created. Verify your email, then sign in.</Alert>
           <p className="links"><a href="/" onClick={followLink}>Back to sign in</a></p>
         </>
       ) : (
-        <form className="form" onSubmit={submit}>
+        <form className="form" onSubmit={submit} noValidate>
           <Alert>{error}</Alert>
           <Field label="Tenant name" name="tenantName" value={form.tenantName} onChange={update} required />
           <Field label="Tenant slug" name="tenantSlug" hint="Lowercase letters, numbers, and hyphens." value={form.tenantSlug} onChange={update} required />
@@ -146,8 +149,7 @@ export function VerifyEmailPage() {
   }
 
   return (
-    <section className="panel narrow">
-      <p className="eyebrow">DeployHub</p>
+    <section className="panel narrow auth">
       <h1>Verify email</h1>
       {done ? (
         <>
@@ -155,7 +157,7 @@ export function VerifyEmailPage() {
           <p className="links"><a href="/" onClick={followLink}>Sign in</a></p>
         </>
       ) : (
-        <form className="form" onSubmit={submit}>
+        <form className="form" onSubmit={submit} noValidate>
           <Alert>{error}</Alert>
           <Field label="Verification token" name="token" value={token} onChange={(event) => setToken(event.target.value)} required />
           <button type="submit" disabled={pending}>{pending ? 'Verifying…' : 'Verify email'}</button>
@@ -211,11 +213,10 @@ export function ResetPasswordPage() {
   }
 
   return (
-    <section className="panel narrow">
-      <p className="eyebrow">DeployHub</p>
+    <section className="panel narrow auth">
       <h1>Reset password</h1>
       {done ? <Alert tone="ok">{done}</Alert> : (
-        <form className="form" onSubmit={submit}>
+        <form className="form" onSubmit={submit} noValidate>
           <Alert>{error}</Alert>
           {mode === 'request' ? (
             <>

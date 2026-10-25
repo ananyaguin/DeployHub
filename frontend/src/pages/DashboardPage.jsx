@@ -43,8 +43,7 @@ export function DashboardPage() {
     <section>
       <div className="page-head">
         <div>
-          <p className="eyebrow">Dashboard</p>
-          <h1>Deployments</h1>
+          <h1>Dashboard</h1>
         </div>
         <a className="button" href="/deployments" onClick={followLink}>View deployments</a>
       </div>
@@ -53,7 +52,7 @@ export function DashboardPage() {
       {state.status === 'ready' && state.total === 0 ? (
         <div className="panel">
           <h2>No deployments yet</h2>
-          <p className="lede">Create one to record a version and queue a deploy. This screen only shows what the API returns.</p>
+          <p className="lede">Create a deployment to record a version and queue work.</p>
           <a className="button" href="/deployments" onClick={followLink}>Create a deployment</a>
         </div>
       ) : null}
@@ -67,7 +66,7 @@ export function DashboardPage() {
           </div>
           {state.complete ? null : <p className="muted">Status counts cover the first {state.deployments.length} of {state.total} deployments.</p>}
           <h2>Recent activity</h2>
-          <p className="muted">Events from the newest loaded deployments. The API has no account-wide activity feed.</p>
+          <p className="muted">From the newest deployments on this page.</p>
           {state.events.length === 0 ? <p className="muted">No events yet.</p> : (
             <ul className="activity">
               {state.events.map((event) => (

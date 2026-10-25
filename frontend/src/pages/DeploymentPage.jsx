@@ -161,7 +161,7 @@ export function DeploymentPage({ publicId }) {
 
   return (
     <section>
-      <p className="eyebrow"><a href="/deployments" onClick={followLink}>Deployments</a></p>
+      <p className="crumb"><a href="/deployments" onClick={followLink}>Deployments</a></p>
       <div className="page-head">
         <div>
           <h1>{deployment.name}</h1>
@@ -178,17 +178,17 @@ export function DeploymentPage({ publicId }) {
           <p>
             <StatusBadge value={execution.status} /> {execution.taskType}
           </p>
-          <p className="muted">The API does not list past executions for a deployment. Events below are the durable history.</p>
+          <p className="muted">Events below are the history for this deployment.</p>
         </article>
       ) : null}
-      <form className="panel form" onSubmit={rename}>
+      <form className="panel form" onSubmit={rename} noValidate>
         <h2>Rename</h2>
         <Field label="Name" name="rename" value={name} onChange={(event) => setName(event.target.value)} required />
         <button type="submit" disabled={pending !== ''}>{pending === 'rename' ? 'Saving…' : 'Save name'}</button>
       </form>
-      <form className="panel form" onSubmit={addVersion}>
+      <form className="panel form" onSubmit={addVersion} noValidate>
         <h2>New version</h2>
-        <Field label="Image" name="image" hint="Tag required. Example: nginx:1.27. Environment variables are not edited here." value={image} onChange={(event) => setImage(event.target.value)} required />
+        <Field label="Image" name="image" hint="Tag required, for example nginx:1.27." value={image} onChange={(event) => setImage(event.target.value)} required />
         <button type="submit" disabled={pending !== '' || deployment.status === 'ARCHIVED'}>{pending === 'version' ? 'Saving…' : 'Record version'}</button>
       </form>
       <div className="table-wrap panel">

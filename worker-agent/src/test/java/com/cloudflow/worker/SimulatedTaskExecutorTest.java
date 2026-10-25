@@ -17,11 +17,11 @@ class SimulatedTaskExecutorTest {
     @Test
     void standardHandlersReportSimulatedSuccess() {
         SimulatedTaskExecutor executor = SimulatedTaskExecutor.standard();
-        executor.execute("DEPLOY");
-        executor.execute("ROLLBACK");
-        executor.execute("STOP");
+        executor.executeType("DEPLOY");
+        executor.executeType("ROLLBACK");
+        executor.executeType("STOP");
         assertTrue(executor.successDetail("DEPLOY").contains("No cloud provider was contacted."));
-        RecordingApi api = new RecordingApi(new ClaimedTask(UUID.randomUUID(), "DEPLOY", 1));
+        RecordingApi api = new RecordingApi(ClaimedTask.simple(UUID.randomUUID(), "DEPLOY", 1));
         WorkerLoop loop = loop(api, executor);
         loop.pollOnce();
         assertEquals(Boolean.TRUE, api.succeeded.get());
@@ -42,7 +42,7 @@ class SimulatedTaskExecutorTest {
                 throw new IllegalStateException("secret-token-boom");
             }
         }));
-        RecordingApi api = new RecordingApi(new ClaimedTask(UUID.randomUUID(), "DEPLOY", 1));
+        RecordingApi api = new RecordingApi(ClaimedTask.simple(UUID.randomUUID(), "DEPLOY", 1));
         WorkerLoop loop = loop(api, executor);
         loop.pollOnce();
         assertEquals(Boolean.FALSE, api.succeeded.get());
@@ -53,7 +53,9 @@ class SimulatedTaskExecutorTest {
 
     private static WorkerLoop loop(RecordingApi api, SimulatedTaskExecutor executor) {
         return new WorkerLoop(
-                new WorkerAgentProperties("http://localhost:8080", "secret-token", "worker-1", Duration.ofSeconds(2)),
+                new WorkerAgentProperties(
+                        "http://localhost:8080", "secret-token", "worker-1", Duration.ofSeconds(2),
+                        "simulator", "", 256, 500),
                 api,
                 executor);
     }
@@ -79,7 +81,7 @@ class SimulatedTaskExecutorTest {
         }
 
         @Override
-        public void complete(String name, UUID executionId, boolean succeeded, String message) {
+        public void complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
             this.succeeded.set(succeeded);
             this.message.set(message);
         }

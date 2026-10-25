@@ -53,6 +53,10 @@ A worker registers with `POST /api/v1/worker/nodes` and refreshes `last_seen_at`
 
 `WORKER_HEARTBEAT_TIMEOUT` (default 30s) marks a quiet worker `OFFLINE`. `WORKER_RUNNING_TIMEOUT` (default 2m) treats a `RUNNING` row as interrupted even if the worker still looks online. `WORKER_MAX_ATTEMPTS` (default 3) is the claim limit. Below the limit the row returns to `QUEUED`. At the limit it becomes `FAILED`. `SUCCEEDED`, `FAILED`, and `CANCELLED` are not claimed again. The sweep also runs on heartbeat and claim. Its own timer is `WORKER_SWEEP_INTERVAL`.
 
+Docker runs only inside the worker process. The API never receives a Docker socket path, and the frontend never does either. `WORKER_EXECUTOR=docker` requires `DOCKER_HOST` (`unix://` or `tcp://`). If that daemon cannot be reached, the execution is failed. The worker does not switch to the simulator. Access to the Docker daemon is host-level power. This project does not change the daemon's own security settings.
+
+A version body may set an image and up to 20 environment variables. The image must be a lowercase reference with a tag or a `sha256` digest. Registry hosts with a port are rejected. Keys such as `PATH`, `HOME`, `IFS`, `LD_PRELOAD`, and `DOCKER_HOST` are rejected. Values are stored and are sent to the worker on claim, so `WORKER_TOKEN` can read them. They are not written to logs, execution output, or user-facing responses. The worker sets memory and CPU itself (`DOCKER_MEMORY_MB` 32–512, default 256; `DOCKER_CPU_MILLIS` 100–1000, default 500). Requests cannot set privileged mode, host networking, mounts, host paths, or other Docker options. Containers are labeled with the tenant and deployment public ids taken from the backend row, and a worker stops only a container whose labels match that task.
+
 ## CORS
 
 `CORS_ALLOWED_ORIGINS` is a comma-separated list. The default is `http://localhost:5173`. `*` is rejected. Credentials are not allowed; the browser sends the bearer token in a header.

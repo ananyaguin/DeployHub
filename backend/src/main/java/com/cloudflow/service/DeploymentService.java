@@ -4,10 +4,13 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import com.cloudflow.dto.request.CreateDeploymentRequest;
 import com.cloudflow.dto.request.CreateExecutionRequest;
+import com.cloudflow.dto.request.CreateVersionRequest;
 import com.cloudflow.dto.request.PageQuery;
 import com.cloudflow.dto.request.UpdateDeploymentRequest;
 import com.cloudflow.dto.response.DeploymentResponse;
@@ -27,7 +30,11 @@ import com.cloudflow.entity.WorkerNode;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.exception.ConflictException;
 import com.cloudflow.exception.NotFoundException;
+import com.cloudflow.exception.TokenRejectedException;
 import com.cloudflow.exception.UnauthorizedException;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cloudflow.repository.DeploymentEventRepository;
 import com.cloudflow.repository.DeploymentRepository;
 import com.cloudflow.repository.DeploymentVersionRepository;
@@ -49,6 +56,9 @@ public class DeploymentService {
     private static final String LOCAL = " No cloud provider was contacted.";
     private static final Collection<ExecutionStatus> OPEN =
             EnumSet.of(ExecutionStatus.QUEUED, ExecutionStatus.RUNNING);
+    private static final Set<String> FORBIDDEN_ENV = Set.of(
+            "PATH", "HOME", "IFS", "ENV", "BASH_ENV", "DOCKER_HOST",
+            "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG");
 
     private final CurrentUserAccessor currentUser;
     private final TenantRepository tenants;
@@ -57,6 +67,7 @@ public class DeploymentService {
     private final DeploymentEventRepository events;
     private final ExecutionRepository executions;
     private final ExecutionLogRepository logs;
+    private final ObjectMapper json;
     private final Clock clock;
 
     public DeploymentService(
@@ -67,6 +78,7 @@ public class DeploymentService {
             DeploymentEventRepository events,
             ExecutionRepository executions,
             ExecutionLogRepository logs,
+            ObjectMapper json,
             Clock clock) {
         this.currentUser = currentUser;
         this.tenants = tenants;
@@ -75,6 +87,7 @@ public class DeploymentService {
         this.events = events;
         this.executions = executions;
         this.logs = logs;
+        this.json = json;
         this.clock = clock;
     }
 
@@ -125,7 +138,7 @@ public class DeploymentService {
     }
 
     @Transactional
-    public DeploymentVersionResponse addVersion(UUID publicId) {
+    public DeploymentVersionResponse addVersion(UUID publicId, CreateVersionRequest request) {
         Deployment deployment = requireDeployment(publicId);
         if (deployment.getStatus() == DeploymentStatus.ARCHIVED) {
             throw new ConflictException(STATE);
@@ -134,10 +147,15 @@ public class DeploymentService {
         DeploymentVersion version = new DeploymentVersion();
         version.setDeployment(deployment);
         version.setVersionNumber(max == null ? 1 : max + 1);
+        if (request != null) {
+            checkEnvironment(request.environment());
+            version.setImageRef(request.image());
+            version.setEnvJson(writeEnvironment(request.environment()));
+        }
         version.assignIdentity();
         version = versions.save(version);
         event(deployment, version, "VERSION_CREATED", "Version " + version.getVersionNumber() + " recorded.");
-        return new DeploymentVersionResponse(version.getPublicId(), version.getVersionNumber());
+        return versionResponse(version);
     }
 
     @Transactional(readOnly = true)
@@ -150,7 +168,7 @@ public class DeploymentService {
                 PageRequest.of(page.page(), page.size(), Sort.by("versionNumber")));
         return new PageResponse<>(
                 results.stream()
-                        .map(version -> new DeploymentVersionResponse(version.getPublicId(), version.getVersionNumber()))
+                        .map(DeploymentService::versionResponse)
                         .toList(),
                 page.page(),
                 page.size(),
@@ -184,7 +202,8 @@ public class DeploymentService {
     }
 
     @Transactional
-    public ExecutionResponse finish(Execution execution, WorkerNode worker, boolean succeeded, String message) {
+    public ExecutionResponse finish(
+            Execution execution, WorkerNode worker, boolean succeeded, String message, String containerId) {
         if (execution.getWorkerNode() == null || worker.getId() == null
                 || !worker.getId().equals(execution.getWorkerNode().getId())) {
             throw new NotFoundException();
@@ -211,6 +230,10 @@ public class DeploymentService {
                 event(execution.getDeployment(), execution.getDeploymentVersion(), "FAILED", detail + LOCAL);
                 return response(execution);
             }
+        }
+        if (succeeded && containerId != null) {
+            execution.getDeploymentVersion().setContainerId(containerId);
+            versions.save(execution.getDeploymentVersion());
         }
         String detail = sanitize(message);
         writeLog(execution, succeeded ? LogLevel.INFO : LogLevel.ERROR, detail);
@@ -311,6 +334,49 @@ public class DeploymentService {
             return cleaned.substring(0, 1000);
         }
         return cleaned;
+    }
+
+    public Map<String, String> environmentOf(DeploymentVersion version) {
+        if (version.getEnvJson() == null || version.getEnvJson().isBlank()) {
+            return Map.of();
+        }
+        try {
+            return json.readValue(version.getEnvJson(), new TypeReference<Map<String, String>>() {});
+        } catch (JsonProcessingException ex) {
+            return null;
+        }
+    }
+
+    private void checkEnvironment(Map<String, String> environment) {
+        if (environment == null || environment.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : environment.entrySet()) {
+            String key = entry.getKey();
+            String value = entry.getValue();
+            if (key == null || !key.matches("^[A-Z][A-Z0-9_]{0,62}$") || FORBIDDEN_ENV.contains(key)) {
+                throw new TokenRejectedException();
+            }
+            if (value == null || value.length() > 256 || value.chars().anyMatch(ch -> ch < 32 || ch == 127)) {
+                throw new TokenRejectedException();
+            }
+        }
+    }
+
+    private String writeEnvironment(Map<String, String> environment) {
+        if (environment == null || environment.isEmpty()) {
+            return null;
+        }
+        try {
+            return json.writeValueAsString(environment);
+        } catch (JsonProcessingException ex) {
+            throw new TokenRejectedException();
+        }
+    }
+
+    private static DeploymentVersionResponse versionResponse(DeploymentVersion version) {
+        return new DeploymentVersionResponse(
+                version.getPublicId(), version.getVersionNumber(), version.getImageRef(), version.getContainerId());
     }
 
     private static ExecutionResponse response(Execution execution) {

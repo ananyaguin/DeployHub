@@ -75,7 +75,8 @@ public class OwnedResourceService {
                 .findByPublicIdAndDeployment_Tenant_Id(versionId, caller.tenantKey())
                 .filter(found -> deploymentId.equals(found.getDeployment().getPublicId()))
                 .orElseThrow(NotFoundException::new);
-        return new DeploymentVersionResponse(version.getPublicId(), version.getVersionNumber());
+        return new DeploymentVersionResponse(
+                version.getPublicId(), version.getVersionNumber(), version.getImageRef(), version.getContainerId());
     }
 
     @Transactional(readOnly = true)

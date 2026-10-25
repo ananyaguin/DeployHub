@@ -3,6 +3,7 @@ package com.cloudflow.service;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -11,6 +12,7 @@ import com.cloudflow.dto.response.ExecutionResponse;
 import com.cloudflow.dto.response.WorkerNodeResponse;
 import com.cloudflow.dto.response.WorkerTaskResponse;
 import com.cloudflow.entity.DeploymentEvent;
+import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionLog;
 import com.cloudflow.entity.ExecutionStatus;
@@ -114,17 +116,30 @@ public class WorkerService {
             }
             Execution claimed = executions.findById(next.getId()).orElseThrow(NotFoundException::new);
             writeLog(claimed, claimed.getAttemptCount() * 2 - 1, LogLevel.INFO, "Claimed by " + worker.getName() + ".");
+            DeploymentVersion version = claimed.getDeploymentVersion();
+            Map<String, String> environment = deployments.environmentOf(version);
             return Optional.of(new WorkerTaskResponse(
-                    claimed.getPublicId(), claimed.getTaskType(), claimed.getAttemptCount()));
+                    claimed.getPublicId(),
+                    claimed.getTaskType(),
+                    claimed.getAttemptCount(),
+                    claimed.getDeployment().getTenant().getPublicId(),
+                    claimed.getDeployment().getPublicId(),
+                    version.getVersionNumber(),
+                    version.getImageRef(),
+                    environment == null ? Map.of() : environment,
+                    claimed.getDeployment().getCurrentVersionNumber(),
+                    version.getContainerId(),
+                    environment != null));
         }
         return Optional.empty();
     }
 
     @Transactional
-    public ExecutionResponse finish(UUID publicId, String name, boolean succeeded, String message) {
+    public ExecutionResponse finish(
+            UUID publicId, String name, boolean succeeded, String message, String containerId) {
         WorkerNode worker = require(name);
         Execution execution = executions.findByPublicId(publicId).orElseThrow(NotFoundException::new);
-        return deployments.finish(execution, worker, succeeded, message);
+        return deployments.finish(execution, worker, succeeded, message, containerId);
     }
 
     @Scheduled(

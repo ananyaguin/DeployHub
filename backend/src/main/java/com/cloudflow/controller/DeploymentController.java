@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.cloudflow.dto.request.CreateDeploymentRequest;
 import com.cloudflow.dto.request.CreateExecutionRequest;
+import com.cloudflow.dto.request.CreateVersionRequest;
 import com.cloudflow.dto.request.PageQuery;
 import com.cloudflow.dto.request.UpdateDeploymentRequest;
 import com.cloudflow.dto.response.DeploymentResponse;
@@ -49,8 +50,9 @@ public class DeploymentController {
 
     @PostMapping("/api/v1/deployments/{publicId}/versions")
     @ResponseStatus(HttpStatus.CREATED)
-    public DeploymentVersionResponse addVersion(@PathVariable UUID publicId) {
-        return deployments.addVersion(publicId);
+    public DeploymentVersionResponse addVersion(
+            @PathVariable UUID publicId, @RequestBody(required = false) @Valid CreateVersionRequest request) {
+        return deployments.addVersion(publicId, request);
     }
 
     @GetMapping("/api/v1/deployments/{publicId}/versions")

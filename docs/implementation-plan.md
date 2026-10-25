@@ -225,6 +225,12 @@ Completed 2026-10-25. `POST /api/v1/executions` queues work. The worker process 
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 48 passed. Worker tests: 3 passed. Those tests use repository doubles or no database. Migrations were not applied. MySQL 8 was not tested.
 
+## Docker execution
+
+Completed 2026-10-25. The worker selects `WORKER_EXECUTOR=simulator` or `WORKER_EXECUTOR=docker`. Docker mode uses docker-java 3.4.2 inside the worker process. Deploy and rollback create or reuse one labeled container and apply the worker's CPU and memory limits. Stop is limited to that deployment version. A down daemon fails the execution. `V5__version_image_and_container.sql` adds `image_ref`, `env_json`, and `container_id`. V1 through V4 were not edited.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 49 passed. Worker tests: 12 passed, 1 skipped (`DockerDaemonTest`, socket not readable). Those tests use a mocked Docker client, repository doubles, or no database. Migrations were not applied. MySQL 8 was not tested.
+
 ## Recommended next step
 
-Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not add a container runtime until that stage is requested.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not add Kubernetes or a cloud provider until that stage is requested.

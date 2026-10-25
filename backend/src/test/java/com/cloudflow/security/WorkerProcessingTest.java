@@ -59,6 +59,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class WorkerProcessingTest extends SecurityTestBase {
 
     private static final String WORKER = "Worker test-worker-token";
+    private static final String CONTAINER = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     private final Map<String, WorkerNode> nodes = new ConcurrentHashMap<>();
     private final List<Execution> rows = new ArrayList<>();
@@ -281,8 +282,9 @@ class WorkerProcessingTest extends SecurityTestBase {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.taskType").value("DEPLOY"))
                 .andExpect(jsonPath("$.attempt").value(1));
-        finish(queued, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        finish(queued, true, "Simulated DEPLOY completed. No cloud provider was contacted.", CONTAINER);
         assertEquals(DeploymentStatus.ACTIVE, deployment.getStatus());
+        assertEquals(CONTAINER, second.getContainerId());
         assertEquals(2, deployment.getCurrentVersionNumber());
         assertTrue(logRows.stream().noneMatch(row -> row.getMessage().contains("test-worker-token")));
 
@@ -395,10 +397,16 @@ class WorkerProcessingTest extends SecurityTestBase {
     }
 
     private void finish(String id, boolean succeeded, String message) throws Exception {
+        finish(id, succeeded, message, null);
+    }
+
+    private void finish(String id, boolean succeeded, String message, String containerId) throws Exception {
+        String container = containerId == null ? "" : ",\"containerId\":\"" + containerId + "\"";
         mockMvc.perform(post("/api/v1/worker/tasks/" + id + "/result")
                         .header(AUTHORIZATION, WORKER)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"worker-1\",\"succeeded\":" + succeeded + ",\"message\":\"" + message + "\"}"))
+                        .content("{\"name\":\"worker-1\",\"succeeded\":" + succeeded + ",\"message\":\"" + message + "\""
+                                + container + "}"))
                 .andExpect(status().isOk())
                 .andExpect(content().string(not(containsString("Secret"))));
     }

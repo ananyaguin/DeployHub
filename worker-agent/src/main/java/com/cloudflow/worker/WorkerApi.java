@@ -11,5 +11,5 @@ public interface WorkerApi {
 
     Optional<ClaimedTask> claim(String name);
 
-    void complete(String name, UUID executionId, boolean succeeded, String message);
+    void complete(String name, UUID executionId, boolean succeeded, String message, String containerId);
 }

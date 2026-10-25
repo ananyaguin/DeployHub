@@ -14,15 +14,15 @@ public class WorkerLoop implements ApplicationRunner, DisposableBean {
 
     private final WorkerAgentProperties properties;
     private final WorkerApi api;
-    private final SimulatedTaskExecutor simulator;
+    private final DeploymentExecutor executor;
     private volatile boolean running = true;
     private volatile boolean registered;
     private Thread thread;
 
-    public WorkerLoop(WorkerAgentProperties properties, WorkerApi api, SimulatedTaskExecutor simulator) {
+    public WorkerLoop(WorkerAgentProperties properties, WorkerApi api, DeploymentExecutor executor) {
         this.properties = properties;
         this.api = api;
-        this.simulator = simulator;
+        this.executor = executor;
     }
 
     @Override
@@ -68,10 +68,10 @@ public class WorkerLoop implements ApplicationRunner, DisposableBean {
 
     private void runTask(ClaimedTask task) {
         try {
-            simulator.execute(task.taskType());
-            api.complete(properties.name(), task.publicId(), true, simulator.successDetail(task.taskType()));
+            TaskResult result = executor.execute(task);
+            api.complete(properties.name(), task.publicId(), result.succeeded(), result.message(), result.containerId());
         } catch (RuntimeException ex) {
-            api.complete(properties.name(), task.publicId(), false, simulator.failureDetail(task.taskType()));
+            api.complete(properties.name(), task.publicId(), false, "Task failed.", null);
         }
     }
 

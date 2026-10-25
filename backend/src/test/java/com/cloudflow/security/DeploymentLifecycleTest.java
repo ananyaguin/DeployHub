@@ -36,6 +36,8 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -50,6 +52,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -177,6 +180,27 @@ class DeploymentLifecycleTest extends SecurityTestBase {
                         .content("{\"name\":\"Nope\",\"status\":\"ACTIVE\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Deployment state cannot change that way"));
+    }
+
+    @Test
+    void versionImageIsStoredWithoutEnvironmentValues() throws Exception {
+        Deployment deployment = draft();
+        asUser(member, post("/api/v1/deployments/" + deployment.getPublicId() + "/versions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:1.27\",\"environment\":{\"APP_MODE\":\"super-secret\"}}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.image").value("nginx:1.27"))
+                .andExpect(jsonPath("$.containerId").value(nullValue()))
+                .andExpect(content().string(not(containsString("super-secret"))));
+        asUser(member, post("/api/v1/deployments/" + deployment.getPublicId() + "/versions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"Nginx:latest\"}"))
+                .andExpect(status().isBadRequest());
+        asUser(member, post("/api/v1/deployments/" + deployment.getPublicId() + "/versions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"image\":\"nginx:1.27\",\"environment\":{\"PATH\":\"/tmp/super-secret\"}}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().string(not(containsString("super-secret"))));
     }
 
     @Test

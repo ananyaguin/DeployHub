@@ -43,6 +43,7 @@ public class WorkerController {
 
     @PostMapping("/api/v1/worker/tasks/{publicId}/result")
     public ExecutionResponse result(@PathVariable UUID publicId, @Valid @RequestBody WorkerResultRequest request) {
-        return workers.finish(publicId, request.name(), request.succeeded(), request.message());
+        return workers.finish(
+                publicId, request.name(), request.succeeded(), request.message(), request.containerId());
     }
 }

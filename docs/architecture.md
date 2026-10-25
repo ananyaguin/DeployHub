@@ -7,7 +7,7 @@ browser  ->  frontend (Vite, React 18)
                 |
                 v
          cloudflow-backend   health, accounts, deployment queue, worker claim API
-         cloudflow-worker-agent   separate JVM, polls the API, simulated tasks only
+         cloudflow-worker-agent   separate JVM, polls the API, simulator or local Docker
 ```
 
 Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spring Boot 3.5.16. A parent POM exists because there are two modules.
@@ -27,7 +27,7 @@ Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spri
 | `com.cloudflow.exception` | API errors |
 | `com.cloudflow.configuration` | Spring configuration outside security and persistence |
 
-`configuration` holds mail settings and worker timeouts. Authentication decisions are in `docs/security.md`. The worker agent does not open the database. `SimulatedTaskExecutor` runs `DEPLOY`, `ROLLBACK`, and `STOP` in process and does not call Docker, Kubernetes, or a cloud API.
+`configuration` holds mail settings and worker timeouts. Authentication decisions are in `docs/security.md`. The worker agent does not open the database. `WORKER_EXECUTOR=simulator` (the default) runs `DEPLOY`, `ROLLBACK`, and `STOP` in process. `WORKER_EXECUTOR=docker` uses the local Docker daemon for those same tasks and does not fall back to the simulator when the daemon is down. Neither mode calls Kubernetes or a cloud API.
 
 ## Frontend
 

@@ -14,7 +14,11 @@ public class WorkerConfiguration {
     }
 
     @Bean
-    SimulatedTaskExecutor simulatedTaskExecutor() {
+    DeploymentExecutor deploymentExecutor(WorkerAgentProperties properties) {
+        if ("docker".equals(properties.executor())) {
+            return new DockerTaskExecutor(
+                    new DockerJavaEngine(properties.dockerHost()), properties.memoryBytes(), properties.nanoCpus());
+        }
         return SimulatedTaskExecutor.standard();
     }
 }

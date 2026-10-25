@@ -6,7 +6,7 @@ import java.util.List;
  * Runs a claimed task inside this process. It does not call Docker, Kubernetes, or a cloud API.
  * {@code execute} returns only when the handler returns. A thrown handler is a failed task.
  */
-public final class SimulatedTaskExecutor {
+public final class SimulatedTaskExecutor implements DeploymentExecutor {
 
     private final List<TaskHandler> handlers;
 
@@ -19,7 +19,17 @@ public final class SimulatedTaskExecutor {
                 List.of(new DeployTaskHandler(), new RollbackTaskHandler(), new StopTaskHandler()));
     }
 
-    public void execute(String taskType) {
+    @Override
+    public TaskResult execute(ClaimedTask task) {
+        try {
+            executeType(task.taskType());
+            return TaskResult.ok(successDetail(task.taskType()), null);
+        } catch (RuntimeException ex) {
+            return TaskResult.failed(failureDetail(task.taskType()));
+        }
+    }
+
+    public void executeType(String taskType) {
         for (TaskHandler handler : handlers) {
             if (handler.taskType().equals(taskType)) {
                 handler.execute();

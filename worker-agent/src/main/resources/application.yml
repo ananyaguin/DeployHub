@@ -8,3 +8,7 @@ cloudflow:
     token: ${WORKER_TOKEN:}
     name: ${WORKER_NAME:worker-1}
     poll-interval: ${WORKER_POLL_INTERVAL:2s}
+    executor: ${WORKER_EXECUTOR:simulator}
+    docker-host: ${DOCKER_HOST:}
+    memory-mb: ${DOCKER_MEMORY_MB:256}
+    cpu-millis: ${DOCKER_CPU_MILLIS:500}

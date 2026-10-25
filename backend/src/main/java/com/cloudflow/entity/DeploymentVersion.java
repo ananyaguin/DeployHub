@@ -24,6 +24,15 @@ public class DeploymentVersion extends PublicEntity {
     @Column(name = "version_number", nullable = false, updatable = false)
     private Integer versionNumber;
 
+    @Column(name = "image_ref", length = 255)
+    private String imageRef;
+
+    @Column(name = "env_json", columnDefinition = "text")
+    private String envJson;
+
+    @Column(name = "container_id", length = 64)
+    private String containerId;
+
     public Deployment getDeployment() {
         return deployment;
     }
@@ -38,5 +47,29 @@ public class DeploymentVersion extends PublicEntity {
 
     public void setVersionNumber(Integer versionNumber) {
         this.versionNumber = versionNumber;
+    }
+
+    public String getImageRef() {
+        return imageRef;
+    }
+
+    public void setImageRef(String imageRef) {
+        this.imageRef = imageRef;
+    }
+
+    public String getEnvJson() {
+        return envJson;
+    }
+
+    public void setEnvJson(String envJson) {
+        this.envJson = envJson;
+    }
+
+    public String getContainerId() {
+        return containerId;
+    }
+
+    public void setContainerId(String containerId) {
+        this.containerId = containerId;
     }
 }

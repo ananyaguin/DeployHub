@@ -9,7 +9,6 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
@@ -51,12 +50,21 @@ public final class WorkerHttpClient implements WorkerApi {
         if (response.statusCode() == 204 || response.body() == null || response.body().isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(parse(response.body()));
+        try {
+            return Optional.of(ClaimedTask.parse(json, response.body()));
+        } catch (IOException | IllegalArgumentException ex) {
+            log.warn("Worker response could not be read");
+            throw new IllegalStateException("Worker request failed");
+        }
     }
 
     @Override
-    public void complete(String name, UUID executionId, boolean succeeded, String message) {
-        post("/api/v1/worker/tasks/" + executionId + "/result", body(name, succeeded, message), false);
+    public void complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
+        ObjectNode node = body(name, succeeded, message);
+        if (containerId != null) {
+            node.put("containerId", containerId);
+        }
+        post("/api/v1/worker/tasks/" + executionId + "/result", node, false);
     }
 
     private ObjectNode body(String name, Boolean succeeded, String message) {
@@ -100,16 +108,4 @@ public final class WorkerHttpClient implements WorkerApi {
         }
     }
 
-    private ClaimedTask parse(String body) {
-        try {
-            JsonNode node = json.readTree(body);
-            return new ClaimedTask(
-                    UUID.fromString(node.path("publicId").asText()),
-                    node.path("taskType").asText(),
-                    node.path("attempt").asInt());
-        } catch (IOException | IllegalArgumentException ex) {
-            log.warn("Worker response could not be read");
-            throw new IllegalStateException("Worker request failed");
-        }
-    }
 }

@@ -130,7 +130,9 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 
 `V3__deployment_current_version.sql` adds nullable `deployments.current_version_number`. It is not a foreign key, because `deployment_versions` already references `deployments`.
 
-`V4__execution_attempt_count.sql` adds `executions.attempt_count`. It counts claims, not a new execution row. None of these migrations has been applied on this machine, and MySQL 8 has not been used to apply them.
+`V4__execution_attempt_count.sql` adds `executions.attempt_count`. It counts claims, not a new execution row.
+
+`V5__version_image_and_container.sql` adds nullable `deployment_versions.image_ref`, `env_json`, and `container_id`. `env_json` holds environment values for the worker. User APIs do not return it. V1 through V4 were not edited. None of these migrations has been applied on this machine, and MySQL 8 has not been used to apply them.
 
 | Table | Owned by | Notes |
 | --- | --- | --- |
@@ -140,7 +142,7 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 | `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
 | `worker_nodes` | global | No tenant and no capacity column. Status `ONLINE` or `OFFLINE`. |
 | `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. `current_version_number` is the live version after V3. |
-| `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. |
+| `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. V5 adds nullable `image_ref`, `env_json`, and `container_id`. |
 | `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
 | `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. `attempt_count` is added in V4. |
 | `execution_logs` | execution, cascade delete | Unique `(execution_id, sequence_no)` is the read index. |
@@ -151,7 +153,7 @@ Assumptions kept small on purpose:
 
 - Accounts are local password accounts. There is no external-identity table.
 - A person who works in two tenants has two user rows.
-- Deployment source artifacts, environment variables, and schedules are not columns yet.
+- A version may store one image reference and environment JSON. Schedules are not columns.
 - Notification preferences cover email only.
 - A delivery may exist before it is tied to an execution.
 - Worker capacity is not stored. A later migration can add it when a scheduler needs it.

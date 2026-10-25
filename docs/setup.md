@@ -22,15 +22,18 @@ mvn -pl backend spring-boot:run
 
 Health check: `curl -s http://localhost:8080/api/v1/health`
 
-Deployment writes need a signed-in user. A deploy, rollback, or stop records a local execution. It does not contact a cloud provider.
+Deployment writes need a signed-in user. A deploy, rollback, or stop queues an execution. The API does not run the task.
 
-Run the worker:
+Run the worker in another shell:
 
 ```bash
+export WORKER_TOKEN=change-me-worker-token
+export WORKER_NAME=worker-1
+export WORKER_BACKEND_URL=http://localhost:8080
 mvn -pl worker-agent spring-boot:run
 ```
 
-The worker process exits after the context starts. That is expected until it has a job loop.
+`WORKER_TOKEN` must match the backend. An empty token makes this process exit after startup. With a token, the process registers, sends a heartbeat, and claims queued work. The task handler is `SimulatedTaskExecutor`. It does not deploy a container. Heartbeat and retry settings are `WORKER_HEARTBEAT_TIMEOUT`, `WORKER_RUNNING_TIMEOUT`, and `WORKER_MAX_ATTEMPTS`.
 
 ## Frontend
 
@@ -63,7 +66,6 @@ Production should set a real host, port 587 with STARTTLS, a mailbox user and pa
 
 ## Not built yet
 
-- The worker job loop
 - Docker Compose
 - GitHub Actions
 

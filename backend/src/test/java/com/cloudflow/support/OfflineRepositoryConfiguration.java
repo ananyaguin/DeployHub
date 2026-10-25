@@ -11,6 +11,7 @@ import com.cloudflow.repository.NotificationPreferenceRepository;
 import com.cloudflow.repository.PasswordResetTokenRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.repository.UserRepository;
+import com.cloudflow.repository.worker.WorkerNodeRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -84,5 +85,11 @@ public class OfflineRepositoryConfiguration {
     @ConditionalOnMissingBean
     PasswordResetTokenRepository passwordResetTokenRepository() {
         return mock(PasswordResetTokenRepository.class);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    WorkerNodeRepository workerNodeRepository() {
+        return mock(WorkerNodeRepository.class);
     }
 }

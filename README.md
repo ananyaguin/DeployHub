@@ -1,6 +1,6 @@
 # DeployHub
 
-Deployment and job orchestration. The backend registers and logs in users, then scopes deployment reads and writes to the caller's tenant. A deploy request records a local execution. It does not contact a cloud provider. Token rules are in `docs/security.md`.
+Deployment and job orchestration. The backend registers and logs in users, then scopes deployment reads and writes to the caller's tenant. A deploy request queues an execution. The worker claims it and runs a simulator. It does not contact a cloud provider. Token rules are in `docs/security.md`.
 
 The product name is CloudFlow. The directory name is DeployHub. This directory is the repository root.
 
@@ -9,8 +9,8 @@ The product name is CloudFlow. The directory name is DeployHub. This directory i
 | Path | Artifact | Role |
 | --- | --- | --- |
 | `pom.xml` | `com.cloudflow:cloudflow` | Maven parent, Java 17, Spring Boot 3.5.16 |
-| `backend/` | `cloudflow-backend` | HTTP API. Health only. |
-| `worker-agent/` | `cloudflow-worker-agent` | Separate process. No job loop yet. |
+| `backend/` | `cloudflow-backend` | HTTP API. |
+| `worker-agent/` | `cloudflow-worker-agent` | Polls the API and runs simulated tasks. |
 | `frontend/` | `cloudflow-frontend` | React 18 and Vite. JavaScript and JSX. |
 
 Backend packages under `com.cloudflow` stay separate: `controller`, `service`, `entity`, `repository`, `dto`, `security`, `exception`, `configuration`. The worker lives in `com.cloudflow.worker`.

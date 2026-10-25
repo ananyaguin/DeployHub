@@ -2,6 +2,8 @@ package com.cloudflow.service;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.EnumSet;
 import java.util.UUID;
 
 import com.cloudflow.dto.request.CreateDeploymentRequest;
@@ -17,8 +19,11 @@ import com.cloudflow.entity.DeploymentEvent;
 import com.cloudflow.entity.DeploymentStatus;
 import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
+import com.cloudflow.entity.ExecutionLog;
 import com.cloudflow.entity.ExecutionStatus;
+import com.cloudflow.entity.LogLevel;
 import com.cloudflow.entity.TaskType;
+import com.cloudflow.entity.WorkerNode;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.exception.ConflictException;
 import com.cloudflow.exception.NotFoundException;
@@ -26,6 +31,7 @@ import com.cloudflow.exception.UnauthorizedException;
 import com.cloudflow.repository.DeploymentEventRepository;
 import com.cloudflow.repository.DeploymentRepository;
 import com.cloudflow.repository.DeploymentVersionRepository;
+import com.cloudflow.repository.ExecutionLogRepository;
 import com.cloudflow.repository.ExecutionRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.security.AuthenticatedUser;
@@ -41,6 +47,8 @@ public class DeploymentService {
 
     private static final String STATE = "Deployment state cannot change that way";
     private static final String LOCAL = " No cloud provider was contacted.";
+    private static final Collection<ExecutionStatus> OPEN =
+            EnumSet.of(ExecutionStatus.QUEUED, ExecutionStatus.RUNNING);
 
     private final CurrentUserAccessor currentUser;
     private final TenantRepository tenants;
@@ -48,6 +56,7 @@ public class DeploymentService {
     private final DeploymentVersionRepository versions;
     private final DeploymentEventRepository events;
     private final ExecutionRepository executions;
+    private final ExecutionLogRepository logs;
     private final Clock clock;
 
     public DeploymentService(
@@ -57,6 +66,7 @@ public class DeploymentService {
             DeploymentVersionRepository versions,
             DeploymentEventRepository events,
             ExecutionRepository executions,
+            ExecutionLogRepository logs,
             Clock clock) {
         this.currentUser = currentUser;
         this.tenants = tenants;
@@ -64,6 +74,7 @@ public class DeploymentService {
         this.versions = versions;
         this.events = events;
         this.executions = executions;
+        this.logs = logs;
         this.clock = clock;
     }
 
@@ -160,20 +171,55 @@ public class DeploymentService {
 
     private ExecutionResponse change(Deployment deployment, DeploymentVersion version, TaskType task) {
         Integer current = deployment.getCurrentVersionNumber();
-        DeploymentStatus next = switch (task) {
+        switch (task) {
             case DEPLOY -> deploy(deployment, version, current);
             case ROLLBACK -> rollback(deployment, version, current);
             case STOP -> stop(deployment, version, current);
-        };
-        Integer nextVersion = task == TaskType.STOP ? current : version.getVersionNumber();
-        claim(deployment, deployment.getStatus(), current, next, nextVersion);
-        ExecutionResponse execution = record(deployment, version, task);
+        }
+        // ponytail: check-then-insert. Two concurrent queues can both pass; the later completion fails the deployment claim.
+        if (executions.existsByDeployment_IdAndStatusIn(deployment.getId(), OPEN)) {
+            throw new ConflictException(STATE);
+        }
+        return queue(deployment, version, task);
+    }
+
+    @Transactional
+    public ExecutionResponse finish(Execution execution, WorkerNode worker, boolean succeeded, String message) {
+        if (execution.getWorkerNode() == null || worker.getId() == null
+                || !worker.getId().equals(execution.getWorkerNode().getId())) {
+            throw new NotFoundException();
+        }
+        if (execution.getStatus() != ExecutionStatus.RUNNING) {
+            return response(execution);
+        }
+        Instant now = clock.instant();
+        ExecutionStatus target = succeeded ? ExecutionStatus.SUCCEEDED : ExecutionStatus.FAILED;
+        int won = executions.finishIfRunning(execution.getId(), worker.getId(), target, now);
+        if (won != 1) {
+            return response(executions.findById(execution.getId()).orElseThrow(NotFoundException::new));
+        }
+        execution.setStatus(target);
+        execution.setFinishedAt(now);
+        if (succeeded) {
+            try {
+                apply(execution);
+            } catch (ConflictException ex) {
+                execution.setStatus(ExecutionStatus.FAILED);
+                executions.save(execution);
+                String detail = "Deployment state changed before the worker finished.";
+                writeLog(execution, LogLevel.ERROR, detail);
+                event(execution.getDeployment(), execution.getDeploymentVersion(), "FAILED", detail + LOCAL);
+                return response(execution);
+            }
+        }
+        String detail = sanitize(message);
+        writeLog(execution, succeeded ? LogLevel.INFO : LogLevel.ERROR, detail);
         event(
-                deployment,
-                version,
-                task.name(),
-                "Moved to " + next + " at version " + nextVersion + "." + LOCAL);
-        return execution;
+                execution.getDeployment(),
+                execution.getDeploymentVersion(),
+                succeeded ? "SUCCEEDED" : "FAILED",
+                detail + LOCAL);
+        return response(execution);
     }
 
     private static DeploymentStatus deploy(Deployment deployment, DeploymentVersion version, Integer current) {
@@ -218,26 +264,65 @@ public class DeploymentService {
         deployment.setCurrentVersionNumber(nextVersion);
     }
 
-    private ExecutionResponse record(Deployment deployment, DeploymentVersion version, TaskType task) {
-        Instant now = clock.instant();
+    private void apply(Execution execution) {
+        Deployment deployment = execution.getDeployment();
+        DeploymentVersion version = execution.getDeploymentVersion();
+        Integer current = deployment.getCurrentVersionNumber();
+        DeploymentStatus next = switch (execution.getTaskType()) {
+            case DEPLOY -> deploy(deployment, version, current);
+            case ROLLBACK -> rollback(deployment, version, current);
+            case STOP -> stop(deployment, version, current);
+        };
+        Integer nextVersion = execution.getTaskType() == TaskType.STOP ? current : version.getVersionNumber();
+        claim(deployment, deployment.getStatus(), current, next, nextVersion);
+    }
+
+    private ExecutionResponse queue(Deployment deployment, DeploymentVersion version, TaskType task) {
         Execution execution = new Execution();
         execution.setDeployment(deployment);
         execution.setDeploymentVersion(version);
         execution.setTaskType(task);
-        execution.setStatus(ExecutionStatus.SUCCEEDED);
-        execution.setStartedAt(now);
-        execution.setFinishedAt(now);
+        execution.setStatus(ExecutionStatus.QUEUED);
+        execution.setAttemptCount(0);
         execution.assignIdentity();
         execution = executions.save(execution);
+        event(deployment, version, "QUEUED", "Queued " + task + " for a worker." + LOCAL);
+        return response(execution);
+    }
+
+    private void writeLog(Execution execution, LogLevel level, String message) {
+        ExecutionLog row = new ExecutionLog();
+        row.setExecution(execution);
+        row.setSequenceNumber(Math.max(1, execution.getAttemptCount() * 2));
+        row.setLevel(level);
+        row.setMessage(message);
+        logs.save(row);
+    }
+
+    static String sanitize(String message) {
+        if (message == null || message.isBlank()) {
+            return "Worker reported no detail.";
+        }
+        String cleaned = message.replaceAll("\\p{Cntrl}", " ").trim().replaceAll(" +", " ");
+        if (cleaned.contains("Exception") && cleaned.contains(" at ")) {
+            return "Worker reported a failure without a public detail.";
+        }
+        if (cleaned.length() > 1000) {
+            return cleaned.substring(0, 1000);
+        }
+        return cleaned;
+    }
+
+    private static ExecutionResponse response(Execution execution) {
         return new ExecutionResponse(
                 execution.getPublicId(),
-                deployment.getPublicId(),
-                version.getPublicId(),
-                null,
-                task,
-                ExecutionStatus.SUCCEEDED,
-                now,
-                now);
+                execution.getDeployment().getPublicId(),
+                execution.getDeploymentVersion().getPublicId(),
+                execution.getWorkerNode() == null ? null : execution.getWorkerNode().getPublicId(),
+                execution.getTaskType(),
+                execution.getStatus(),
+                execution.getStartedAt(),
+                execution.getFinishedAt());
     }
 
     private void event(Deployment deployment, DeploymentVersion version, String type, String message) {

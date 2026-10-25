@@ -23,6 +23,7 @@ class ResponseExposureTest {
                 ExecutionResponse.class,
                 ExecutionLogResponse.class,
                 WorkerNodeResponse.class,
+                WorkerTaskResponse.class,
                 NotificationPreferenceResponse.class,
                 NotificationDeliveryResponse.class,
                 DeploymentEventResponse.class,

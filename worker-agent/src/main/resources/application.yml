@@ -1,3 +1,10 @@
 spring:
   application:
     name: cloudflow-worker-agent
+
+cloudflow:
+  worker:
+    backend-url: ${WORKER_BACKEND_URL:http://localhost:8080}
+    token: ${WORKER_TOKEN:}
+    name: ${WORKER_NAME:worker-1}
+    poll-interval: ${WORKER_POLL_INTERVAL:2s}

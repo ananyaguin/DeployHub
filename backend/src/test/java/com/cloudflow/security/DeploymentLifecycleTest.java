@@ -1,6 +1,7 @@
 package com.cloudflow.security;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -18,6 +19,7 @@ import com.cloudflow.entity.DeploymentEvent;
 import com.cloudflow.entity.DeploymentStatus;
 import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
+import com.cloudflow.entity.ExecutionStatus;
 import com.cloudflow.entity.TaskType;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.entity.User;
@@ -113,8 +115,18 @@ class DeploymentLifecycleTest extends SecurityTestBase {
                 .thenAnswer(invocation -> new PageImpl<>(List.copyOf(history)));
         when(executions.save(any(Execution.class))).thenAnswer(invocation -> {
             Execution execution = invocation.getArgument(0);
-            executionRows.add(execution);
+            synchronized (executionRows) {
+                executionRows.add(execution);
+            }
             return execution;
+        });
+        when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            Collection<?> statuses = invocation.getArgument(1);
+            synchronized (executionRows) {
+                return executionRows.stream()
+                        .anyMatch(row -> id.equals(row.getDeployment().getId()) && statuses.contains(row.getStatus()));
+            }
         });
         when(events.save(any(DeploymentEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
     }
@@ -168,23 +180,23 @@ class DeploymentLifecycleTest extends SecurityTestBase {
     }
 
     @Test
-    void deployRollbackAndStopFollowTheExistingStatuses() throws Exception {
+    void queueLeavesTheDeploymentUnchanged() throws Exception {
         Deployment deployment = draft();
         DeploymentVersion first = version(deployment);
         DeploymentVersion second = version(deployment);
-        String body = execution(deployment, second, TaskType.DEPLOY);
-        asUser(member, post("/api/v1/executions").contentType(MediaType.APPLICATION_JSON).content(body))
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(execution(deployment, second, TaskType.DEPLOY)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.taskType").value("DEPLOY"))
-                .andExpect(jsonPath("$.status").value("SUCCEEDED"))
-                .andExpect(jsonPath("$.workerId").value(nullValue()));
-        assertEquals(DeploymentStatus.ACTIVE, deployment.getStatus());
-        assertEquals(2, deployment.getCurrentVersionNumber());
-        assertTrue(executionRows.get(0).getTaskType() == TaskType.DEPLOY);
-        assertNull(executionRows.get(0).getWorkerNode());
+                .andExpect(jsonPath("$.status").value("QUEUED"))
+                .andExpect(jsonPath("$.workerId").value(nullValue()))
+                .andExpect(jsonPath("$.startedAt").value(nullValue()));
+        assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
+        assertNull(deployment.getCurrentVersionNumber());
+        assertEquals(TaskType.DEPLOY, executionRows.get(0).getTaskType());
         verify(events, atLeastOnce())
                 .save(argThat(event -> event.getMessage().contains("No cloud provider was contacted")));
-
         asUser(member, post("/api/v1/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(execution(deployment, second, TaskType.DEPLOY)))
@@ -192,26 +204,14 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         asUser(member, post("/api/v1/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(execution(deployment, first, TaskType.ROLLBACK)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.taskType").value("ROLLBACK"));
-        assertEquals(1, deployment.getCurrentVersionNumber());
-        asUser(member, post("/api/v1/executions")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(execution(deployment, second, TaskType.ROLLBACK)))
-                .andExpect(status().isConflict());
-        asUser(member, post("/api/v1/executions")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(execution(deployment, first, TaskType.STOP)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.taskType").value("STOP"));
-        assertEquals(DeploymentStatus.ARCHIVED, deployment.getStatus());
-        asUser(member, post("/api/v1/executions")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(execution(deployment, first, TaskType.DEPLOY)))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Deployment state cannot change that way"));
-        asUser(member, post("/api/v1/deployments/" + deployment.getPublicId() + "/versions"))
-                .andExpect(status().isConflict());
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"deploymentId\":\"" + deployment.getPublicId()
+                                + "\",\"versionId\":\"" + first.getPublicId() + "\",\"taskType\":\"SHIP\"}"))
+                .andExpect(status().isBadRequest());
+        assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
     }
 
     @Test
@@ -273,10 +273,11 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         Future<Boolean> first = pool.submit(() -> attempt(start, request));
         Future<Boolean> second = pool.submit(() -> attempt(start, request));
         start.countDown();
-        assertEquals(1, (first.get() ? 1 : 0) + (second.get() ? 1 : 0));
+        int queued = (first.get() ? 1 : 0) + (second.get() ? 1 : 0);
         pool.shutdown();
-        assertEquals(DeploymentStatus.ACTIVE, deployment.getStatus());
-        assertEquals(1, executionRows.size());
+        assertTrue(queued >= 1 && queued <= 2);
+        assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
+        assertTrue(executionRows.stream().allMatch(row -> row.getStatus() == ExecutionStatus.QUEUED));
     }
 
     private boolean attempt(CountDownLatch start, CreateExecutionRequest request) throws InterruptedException {

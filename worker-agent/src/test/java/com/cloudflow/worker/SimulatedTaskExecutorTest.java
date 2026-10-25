@@ -1,0 +1,87 @@
+package com.cloudflow.worker;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class SimulatedTaskExecutorTest {
+
+    @Test
+    void standardHandlersReportSimulatedSuccess() {
+        SimulatedTaskExecutor executor = SimulatedTaskExecutor.standard();
+        executor.execute("DEPLOY");
+        executor.execute("ROLLBACK");
+        executor.execute("STOP");
+        assertTrue(executor.successDetail("DEPLOY").contains("No cloud provider was contacted."));
+        RecordingApi api = new RecordingApi(new ClaimedTask(UUID.randomUUID(), "DEPLOY", 1));
+        WorkerLoop loop = loop(api, executor);
+        loop.pollOnce();
+        assertEquals(Boolean.TRUE, api.succeeded.get());
+        assertTrue(api.message.get().contains("Simulated DEPLOY"));
+        assertFalse(api.message.get().contains("secret-token"));
+    }
+
+    @Test
+    void handlerFailureDoesNotReportSuccessOrTheExceptionText() {
+        SimulatedTaskExecutor executor = new SimulatedTaskExecutor(List.of(new TaskHandler() {
+            @Override
+            public String taskType() {
+                return "DEPLOY";
+            }
+
+            @Override
+            public void execute() {
+                throw new IllegalStateException("secret-token-boom");
+            }
+        }));
+        RecordingApi api = new RecordingApi(new ClaimedTask(UUID.randomUUID(), "DEPLOY", 1));
+        WorkerLoop loop = loop(api, executor);
+        loop.pollOnce();
+        assertEquals(Boolean.FALSE, api.succeeded.get());
+        assertFalse(api.message.get().contains("secret-token-boom"));
+        assertFalse(api.message.get().contains("Unsupported"));
+        assertTrue(api.message.get().contains("No cloud provider was contacted."));
+    }
+
+    private static WorkerLoop loop(RecordingApi api, SimulatedTaskExecutor executor) {
+        return new WorkerLoop(
+                new WorkerAgentProperties("http://localhost:8080", "secret-token", "worker-1", Duration.ofSeconds(2)),
+                api,
+                executor);
+    }
+
+    private static final class RecordingApi implements WorkerApi {
+        private final ClaimedTask task;
+        private final AtomicReference<Boolean> succeeded = new AtomicReference<>();
+        private final AtomicReference<String> message = new AtomicReference<>();
+
+        private RecordingApi(ClaimedTask task) {
+            this.task = task;
+        }
+
+        @Override
+        public void register(String name) {}
+
+        @Override
+        public void heartbeat(String name) {}
+
+        @Override
+        public Optional<ClaimedTask> claim(String name) {
+            return Optional.of(task);
+        }
+
+        @Override
+        public void complete(String name, UUID executionId, boolean succeeded, String message) {
+            this.succeeded.set(succeeded);
+            this.message.set(message);
+        }
+    }
+}

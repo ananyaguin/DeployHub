@@ -30,3 +30,9 @@ cloudflow:
     reset-url: http://localhost:5173/reset-password
     verification-ttl: 24h
     reset-ttl: 30m
+  worker:
+    heartbeat-timeout: 30s
+    running-timeout: 2m
+    max-attempts: 3
+    sweep-interval: 1h
+    sweep-initial-delay: 1h

@@ -219,6 +219,12 @@ Completed 2026-10-25. Authenticated users create, list, rename, and version depl
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 42 passed. Worker tests: 1 passed. Those tests do not open a database. Migrations were not applied. MySQL 8 was not tested.
 
+## Worker execution
+
+Completed 2026-10-25. `POST /api/v1/executions` queues work. The worker process registers, sends heartbeats, and claims queued rows with a conditional update. `SimulatedTaskExecutor` runs `DEPLOY`, `ROLLBACK`, and `STOP` in process. A finished task updates the deployment only when the status and current version still match. Interrupted work is retried up to `WORKER_MAX_ATTEMPTS`, then failed. `V4__execution_attempt_count.sql` adds `attempt_count`. V1, V2, and V3 were not edited.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 48 passed. Worker tests: 3 passed. Those tests use repository doubles or no database. Migrations were not applied. MySQL 8 was not tested.
+
 ## Recommended next step
 
-Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start the worker job loop until that stage is requested.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not add a container runtime until that stage is requested.

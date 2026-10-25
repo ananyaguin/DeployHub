@@ -69,3 +69,9 @@ cloudflow:
     reset-url: ${MAIL_RESET_URL:http://localhost:5173/reset-password}
     verification-ttl: ${MAIL_VERIFICATION_TTL:24h}
     reset-ttl: ${MAIL_RESET_TTL:30m}
+  worker:
+    heartbeat-timeout: ${WORKER_HEARTBEAT_TIMEOUT:30s}
+    running-timeout: ${WORKER_RUNNING_TIMEOUT:2m}
+    max-attempts: ${WORKER_MAX_ATTEMPTS:3}
+    sweep-interval: ${WORKER_SWEEP_INTERVAL:30s}
+    sweep-initial-delay: ${WORKER_SWEEP_INITIAL_DELAY:30s}

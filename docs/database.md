@@ -128,7 +128,9 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 
 `V2__public_ids_and_task_fields.sql` adds a `CHAR(36)` `public_id` on tenants, users, deployments, deployment versions, executions, and worker nodes. It also adds `users.role` and `executions.task_type`. Internal keys stay numeric. V1 was not edited.
 
-`V3__deployment_current_version.sql` adds nullable `deployments.current_version_number`. It is not a foreign key, because `deployment_versions` already references `deployments`. None of these migrations has been applied on this machine.
+`V3__deployment_current_version.sql` adds nullable `deployments.current_version_number`. It is not a foreign key, because `deployment_versions` already references `deployments`.
+
+`V4__execution_attempt_count.sql` adds `executions.attempt_count`. It counts claims, not a new execution row. None of these migrations has been applied on this machine, and MySQL 8 has not been used to apply them.
 
 | Table | Owned by | Notes |
 | --- | --- | --- |
@@ -136,11 +138,11 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 | `users` | tenant, cascade delete | One tenant per user. Email is unique inside the tenant. `password_hash` is required. Role is `OWNER`, `ADMIN`, or `MEMBER`. |
 | `email_verification_tokens` | user, cascade delete | `token_hash` is unique SHA-256 hex. `used_at` null means unused. |
 | `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
-| `worker_nodes` | global | No tenant. Status `ONLINE` or `OFFLINE`. |
+| `worker_nodes` | global | No tenant and no capacity column. Status `ONLINE` or `OFFLINE`. |
 | `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. `current_version_number` is the live version after V3. |
 | `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. |
 | `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
-| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. |
+| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. `attempt_count` is added in V4. |
 | `execution_logs` | execution, cascade delete | Unique `(execution_id, sequence_no)` is the read index. |
 | `notification_preferences` | user, cascade delete | One row per user. `email_enabled` only. |
 | `notification_deliveries` | user, cascade delete | Optional execution; execution delete sets that id null. Channel `EMAIL`. Status `PENDING`, `SENT`, or `FAILED`. |
@@ -152,5 +154,4 @@ Assumptions kept small on purpose:
 - Deployment source artifacts, environment variables, and schedules are not columns yet.
 - Notification preferences cover email only.
 - A delivery may exist before it is tied to an execution.
-
-No JPA entities were added for these tables.
+- Worker capacity is not stored. A later migration can add it when a scheduler needs it.

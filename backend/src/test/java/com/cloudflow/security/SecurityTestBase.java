@@ -1,6 +1,7 @@
 package com.cloudflow.security;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 import com.cloudflow.entity.Tenant;
@@ -17,6 +18,7 @@ import com.cloudflow.repository.NotificationPreferenceRepository;
 import com.cloudflow.repository.PasswordResetTokenRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.repository.UserRepository;
+import com.cloudflow.repository.worker.WorkerNodeRepository;
 import com.cloudflow.service.AccessTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,6 +82,9 @@ abstract class SecurityTestBase {
     @Autowired
     PasswordResetTokenRepository resets;
 
+    @Autowired
+    WorkerNodeRepository workers;
+
     @MockitoBean
     JavaMailSender mail;
 
@@ -106,6 +111,7 @@ abstract class SecurityTestBase {
                 deliveries,
                 verifications,
                 resets,
+                workers,
                 mail);
         when(users.findByPublicId(any())).thenReturn(Optional.empty());
         when(users.findByTenant_IdAndEmail(any(), any())).thenReturn(Optional.empty());
@@ -128,6 +134,15 @@ abstract class SecurityTestBase {
         when(resets.findByTokenHash(any())).thenReturn(Optional.empty());
         when(resets.consume(any(), any())).thenReturn(0);
         when(resets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(executions.findByPublicId(any())).thenReturn(Optional.empty());
+        when(executions.findById(any())).thenReturn(Optional.empty());
+        when(executions.findFirstByStatusOrderByCreatedAtAsc(any())).thenReturn(Optional.empty());
+        when(executions.findByStatus(any())).thenReturn(List.of());
+        when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenReturn(false);
+        when(workers.findByName(any())).thenReturn(Optional.empty());
+        when(workers.findByPublicId(any())).thenReturn(Optional.empty());
+        when(workers.markStale(any())).thenReturn(0);
+        when(logs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     Tenant tenant(long id, String slug) {

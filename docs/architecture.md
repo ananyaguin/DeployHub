@@ -6,8 +6,8 @@ The backend owns the MySQL schema through Flyway. JPA entities follow that schem
 browser  ->  frontend (Vite, React 18)
                 |
                 v
-         cloudflow-backend   health, registration, login, email verification, password reset, deployment lifecycle
-         cloudflow-worker-agent   separate JVM, no queue yet
+         cloudflow-backend   health, accounts, deployment queue, worker claim API
+         cloudflow-worker-agent   separate JVM, polls the API, simulated tasks only
 ```
 
 Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spring Boot 3.5.16. A parent POM exists because there are two modules.
@@ -27,7 +27,7 @@ Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spri
 | `com.cloudflow.exception` | API errors |
 | `com.cloudflow.configuration` | Spring configuration outside security and persistence |
 
-`configuration` holds mail settings. Authentication decisions are in `docs/security.md`.
+`configuration` holds mail settings and worker timeouts. Authentication decisions are in `docs/security.md`. The worker agent does not open the database. `SimulatedTaskExecutor` runs `DEPLOY`, `ROLLBACK`, and `STOP` in process and does not call Docker, Kubernetes, or a cloud API.
 
 ## Frontend
 

@@ -40,6 +40,9 @@ public class Execution extends TimestampedPublicEntity {
     @Column(name = "finished_at")
     private Instant finishedAt;
 
+    @Column(name = "attempt_count", nullable = false)
+    private int attemptCount;
+
     public Deployment getDeployment() {
         return deployment;
     }
@@ -94,5 +97,13 @@ public class Execution extends TimestampedPublicEntity {
 
     public void setFinishedAt(Instant finishedAt) {
         this.finishedAt = finishedAt;
+    }
+
+    public int getAttemptCount() {
+        return attemptCount;
+    }
+
+    public void setAttemptCount(int attemptCount) {
+        this.attemptCount = attemptCount;
     }
 }

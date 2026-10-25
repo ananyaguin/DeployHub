@@ -57,11 +57,11 @@ export function LoginPage() {
       <div className="auth-choices">
         <a href="/register" onClick={followLink}>
           <span>Create an account</span>
-          <small>New tenant</small>
+          <small>Get started with DeployHub.</small>
         </a>
         <a href="/reset-password" onClick={followLink}>
           <span>Reset password</span>
-          <small>Email a link</small>
+          <small>Recover access to your account.</small>
         </a>
       </div>
     </section>

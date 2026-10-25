@@ -29,7 +29,9 @@ An `OWNER` or `ADMIN` can add a user with `POST /api/v1/users`. That user joins 
 
 ## Tenant isolation
 
-Deployment, version, event, execution, log, and notification reads use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. Notification reads also use the caller's user id.
+Deployment, version, event, execution, log, and notification reads and writes use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. A tenant id in a JSON body is ignored. Notification reads also use the caller's user id.
+
+Deployment status stays `DRAFT`, `ACTIVE`, or `ARCHIVED`. Deploy, rollback, and stop record an execution as `SUCCEEDED` in the same request. That record is local: the API does not call a cloud provider or a container platform. `FAILED` remains an execution status for a later worker. Two requests cannot both move the same deployment; the update matches the status and current version number it read.
 
 ## Email verification and password reset
 

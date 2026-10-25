@@ -213,6 +213,12 @@ Completed 2026-10-25. Registration and admin-created users send a verification l
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 37 passed. Worker tests: 1 passed. Mail is mocked. Migrations were not applied.
 
+## Deployment lifecycle
+
+Completed 2026-10-25. Authenticated users create, list, rename, and version deployments in their own tenant. `POST /api/v1/executions` accepts `DEPLOY`, `ROLLBACK`, and `STOP`. Status stays `DRAFT`, `ACTIVE`, and `ARCHIVED`. Each accepted request records a `SUCCEEDED` execution and an event. Nothing is sent to a cloud provider or a container platform. `V3__deployment_current_version.sql` adds `current_version_number`. V1 and V2 were not edited.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 42 passed. Worker tests: 1 passed. Those tests do not open a database. Migrations were not applied. MySQL 8 was not tested.
+
 ## Recommended next step
 
-Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start deployment orchestration or the worker job loop until that stage is requested.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start the worker job loop until that stage is requested.

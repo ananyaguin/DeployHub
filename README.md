@@ -1,6 +1,6 @@
 # DeployHub
 
-Deployment and job orchestration. The backend registers and logs in users, then scopes reads to the caller's tenant. Token rules are in `docs/security.md`.
+Deployment and job orchestration. The backend registers and logs in users, then scopes deployment reads and writes to the caller's tenant. A deploy request records a local execution. It does not contact a cloud provider. Token rules are in `docs/security.md`.
 
 The product name is CloudFlow. The directory name is DeployHub. This directory is the repository root.
 

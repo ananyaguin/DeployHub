@@ -31,6 +31,9 @@ public class Deployment extends TimestampedPublicEntity {
     @Column(nullable = false, length = 32)
     private DeploymentStatus status;
 
+    @Column(name = "current_version_number")
+    private Integer currentVersionNumber;
+
     public Tenant getTenant() {
         return tenant;
     }
@@ -61,5 +64,13 @@ public class Deployment extends TimestampedPublicEntity {
 
     public void setStatus(DeploymentStatus status) {
         this.status = status;
+    }
+
+    public Integer getCurrentVersionNumber() {
+        return currentVersionNumber;
+    }
+
+    public void setCurrentVersionNumber(Integer currentVersionNumber) {
+        this.currentVersionNumber = currentVersionNumber;
     }
 }

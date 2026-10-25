@@ -22,6 +22,8 @@ mvn -pl backend spring-boot:run
 
 Health check: `curl -s http://localhost:8080/api/v1/health`
 
+Deployment writes need a signed-in user. A deploy, rollback, or stop records a local execution. It does not contact a cloud provider.
+
 Run the worker:
 
 ```bash

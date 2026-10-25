@@ -126,7 +126,9 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 
 `V1__initial_schema.sql` creates twelve tables. Keys are `BIGINT UNSIGNED`. Timestamps are `DATETIME(6)`. The JDBC session time zone is UTC.
 
-`V2__public_ids_and_task_fields.sql` adds a `CHAR(36)` `public_id` on tenants, users, deployments, deployment versions, executions, and worker nodes. It also adds `users.role` and `executions.task_type`. Internal keys stay numeric. V1 was not edited. Neither migration has been applied on this machine.
+`V2__public_ids_and_task_fields.sql` adds a `CHAR(36)` `public_id` on tenants, users, deployments, deployment versions, executions, and worker nodes. It also adds `users.role` and `executions.task_type`. Internal keys stay numeric. V1 was not edited.
+
+`V3__deployment_current_version.sql` adds nullable `deployments.current_version_number`. It is not a foreign key, because `deployment_versions` already references `deployments`. None of these migrations has been applied on this machine.
 
 | Table | Owned by | Notes |
 | --- | --- | --- |
@@ -135,7 +137,7 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 | `email_verification_tokens` | user, cascade delete | `token_hash` is unique SHA-256 hex. `used_at` null means unused. |
 | `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
 | `worker_nodes` | global | No tenant. Status `ONLINE` or `OFFLINE`. |
-| `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. |
+| `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. `current_version_number` is the live version after V3. |
 | `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. |
 | `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
 | `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. |

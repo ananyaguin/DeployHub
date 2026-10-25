@@ -6,7 +6,7 @@ The backend owns the MySQL schema through Flyway. JPA entities follow that schem
 browser  ->  frontend (Vite, React 18)
                 |
                 v
-         cloudflow-backend   health, registration, login, email verification, password reset, tenant-scoped reads
+         cloudflow-backend   health, registration, login, email verification, password reset, deployment lifecycle
          cloudflow-worker-agent   separate JVM, no queue yet
 ```
 

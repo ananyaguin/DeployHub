@@ -6,6 +6,8 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface DeploymentVersionRepository extends JpaRepository<DeploymentVersion, Long> {
 
@@ -13,4 +15,7 @@ public interface DeploymentVersionRepository extends JpaRepository<DeploymentVer
             Long tenantId, UUID deploymentPublicId, Pageable pageable);
 
     Optional<DeploymentVersion> findByPublicIdAndDeployment_Tenant_Id(UUID publicId, Long tenantId);
+
+    @Query("select max(v.versionNumber) from DeploymentVersion v where v.deployment.id = :deploymentId")
+    Integer findMaxVersionNumber(@Param("deploymentId") Long deploymentId);
 }

@@ -165,6 +165,10 @@ public class OwnedResourceService {
 
     private static DeploymentResponse deploymentResponse(Deployment deployment) {
         return new DeploymentResponse(
-                deployment.getPublicId(), deployment.getName(), deployment.getSlug(), deployment.getStatus());
+                deployment.getPublicId(),
+                deployment.getName(),
+                deployment.getSlug(),
+                deployment.getStatus(),
+                deployment.getCurrentVersionNumber());
     }
 }

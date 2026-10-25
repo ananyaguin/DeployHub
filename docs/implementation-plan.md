@@ -203,10 +203,16 @@ Completed 2026-10-24. Request records use Bean Validation. Response records omit
 
 ## Authentication and tenant isolation
 
-Completed 2026-10-24. `POST /api/v1/auth/register` creates a tenant and an unverified OWNER. `POST /api/v1/auth/login` returns a 15-minute HS256 access token when the password matches and the account is verified. The signing secret is `JWT_SECRET` with no default. There is no refresh token and no server-side revocation list. Worker calls use `Authorization: Worker <WORKER_TOKEN>` on a separate filter chain. Resource reads take the tenant from the authenticated user. Another tenant's resource is a 404. Email delivery is not implemented.
+Completed 2026-10-24. `POST /api/v1/auth/register` creates a tenant and an unverified OWNER. `POST /api/v1/auth/login` returns a 15-minute HS256 access token when the password matches and the account is verified. The signing secret is `JWT_SECRET` with no default. There is no refresh token and no server-side revocation list. Worker calls use `Authorization: Worker <WORKER_TOKEN>` on a separate filter chain. Resource reads take the tenant from the authenticated user. Another tenant's resource is a 404. Sending the verification email was left to the next stage.
 
 `mvn verify` on JDK 17.0.17 succeeded. Backend tests: 29 passed. Worker tests: 1 passed. Those tests do not open a database. Migrations were not applied.
 
+## Email verification and password reset
+
+Completed 2026-10-25. Registration and admin-created users send a verification link. `POST /api/v1/auth/verify-email` marks the account verified. Password reset is requested and confirmed without revealing whether the account exists, and it does not verify the account. Tokens are stored as SHA-256 hashes. V1 already had the token tables, so no new migration was added.
+
+`mvn verify` on JDK 17.0.17 succeeded. Backend tests: 37 passed. Worker tests: 1 passed. Mail is mocked. Migrations were not applied.
+
 ## Recommended next step
 
-Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start email delivery until that stage is requested.
+Stop. Wait for approval before the next stage. Do not treat MySQL 9.3.0 as the MySQL 8 verification. Do not start deployment orchestration or the worker job loop until that stage is requested.

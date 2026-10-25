@@ -8,9 +8,9 @@ Registration stores a BCrypt hash. The API never returns that hash. Login compar
 
 ## Accounts
 
-`POST /api/v1/auth/register` creates a tenant and an `OWNER`. The new user's `email_verified_at` stays null. The response has no access token.
+`POST /api/v1/auth/register` creates a tenant and an `OWNER`. The new user's `email_verified_at` stays null. The response has no access token. Registration also stores a hashed verification token and sends the raw token in an email. The API response and logs do not include that raw token.
 
-`REQUIRE_VERIFIED_EMAIL` defaults to true. A correct password for an unverified user returns 403 `Email verification required`. Stage 7 sends the verification email and sets `email_verified_at`. There is no separate disabled column. `AccountPolicy` is the place that will check one if the schema gains it.
+`REQUIRE_VERIFIED_EMAIL` defaults to true. A correct password for an unverified user returns 403 `Email verification required`. `POST /api/v1/auth/verify-email` sets `email_verified_at` only after the token is valid, unexpired, and unused. There is no separate disabled column. `AccountPolicy` is the place that will check one if the schema gains it.
 
 An `OWNER` or `ADMIN` can add a user with `POST /api/v1/users`. That user joins the caller's tenant. A tenant id in the JSON body is ignored. An admin can add a `MEMBER`. Only an owner can add an `ADMIN`. Nobody can add another `OWNER` through this endpoint. A `MEMBER` receives 403.
 
@@ -30,6 +30,18 @@ An `OWNER` or `ADMIN` can add a user with `POST /api/v1/users`. That user joins 
 ## Tenant isolation
 
 Deployment, version, event, execution, log, and notification reads use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. Notification reads also use the caller's user id.
+
+## Email verification and password reset
+
+Both flows store SHA-256 hex of a 32-byte random token. The raw token is only in the email link. `used_at` is set by a conditional update (`used_at is null` and `expires_at` still in the future), so two concurrent requests cannot both consume one token. Other unused tokens for that user are retired in the same transaction. Invalid, expired, reused, and already-consumed tokens all return 400 `Request could not be processed`.
+
+Verification links last `MAIL_VERIFICATION_TTL` (default 24 hours). Reset links last `MAIL_RESET_TTL` (default 30 minutes). Password reset does not set `email_verified_at`.
+
+`POST /api/v1/auth/password-reset` returns 204 for a known account and an unknown account. A mail failure on that endpoint also returns 204. Registration mail failure returns 503 `Email could not be sent` and does not include the SMTP error.
+
+These three endpoints are public. This process does not rate-limit them. Put a limit in front of production, such as 5 requests per client address per hour for `/api/v1/auth/verify-email`, `/api/v1/auth/password-reset`, and `/api/v1/auth/password-reset/confirm`.
+
+SMTP settings are `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM`. An empty host leaves mail unconfigured. Links use `MAIL_VERIFICATION_URL` and `MAIL_RESET_URL`.
 
 ## Workers
 

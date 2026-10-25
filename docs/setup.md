@@ -45,9 +45,22 @@ npm run lint
 
 Vite loads environment files from the repository root (`envDir` is `..`). The only variable is `VITE_API_BASE_URL`.
 
+## Email
+
+Copy the SMTP placeholders from `.env.example` and export them in the shell that starts the backend. Leave `SMTP_HOST` empty to boot without a mail server. Verification and reset links are built from `MAIL_VERIFICATION_URL` and `MAIL_RESET_URL`.
+
+Local catcher, from the repository root, if Docker is installed:
+
+```bash
+docker run --rm -p 1025:1025 -p 8025:8025 mailhog/mailhog
+```
+
+Then export `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, an empty `SMTP_USERNAME`, and `SMTP_FROM=no-reply@localhost`. Open `http://127.0.0.1:8025` to read the message. The API tests do not use this. They mock `JavaMailSender`.
+
+Production should set a real host, port 587 with STARTTLS, a mailbox user and password, and HTTPS frontend URLs. Do not commit those values. Rate-limit the public verification and reset endpoints at the reverse proxy, as described in `docs/security.md`.
+
 ## Not built yet
 
-- Email verification delivery
 - The worker job loop
 - Docker Compose
 - GitHub Actions

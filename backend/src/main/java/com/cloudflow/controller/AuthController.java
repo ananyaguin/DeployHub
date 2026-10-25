@@ -1,7 +1,10 @@
 package com.cloudflow.controller;
 
 import com.cloudflow.dto.request.LoginRequest;
+import com.cloudflow.dto.request.PasswordResetConfirmRequest;
+import com.cloudflow.dto.request.PasswordResetRequest;
 import com.cloudflow.dto.request.RegisterRequest;
+import com.cloudflow.dto.request.VerifyEmailRequest;
 import com.cloudflow.dto.response.LoginResponse;
 import com.cloudflow.dto.response.RegisterResponse;
 import com.cloudflow.service.AccountService;
@@ -32,5 +35,23 @@ public class AuthController {
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
         return accounts.login(request);
+    }
+
+    @PostMapping("/verify-email")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        accounts.verifyEmail(request);
+    }
+
+    @PostMapping("/password-reset")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void requestPasswordReset(@Valid @RequestBody PasswordResetRequest request) {
+        accounts.requestPasswordReset(request);
+    }
+
+    @PostMapping("/password-reset/confirm")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void confirmPasswordReset(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        accounts.confirmPasswordReset(request);
     }
 }

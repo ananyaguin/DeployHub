@@ -9,10 +9,12 @@ import com.cloudflow.entity.UserRole;
 import com.cloudflow.repository.DeploymentEventRepository;
 import com.cloudflow.repository.DeploymentRepository;
 import com.cloudflow.repository.DeploymentVersionRepository;
+import com.cloudflow.repository.EmailVerificationTokenRepository;
 import com.cloudflow.repository.ExecutionLogRepository;
 import com.cloudflow.repository.ExecutionRepository;
 import com.cloudflow.repository.NotificationDeliveryRepository;
 import com.cloudflow.repository.NotificationPreferenceRepository;
+import com.cloudflow.repository.PasswordResetTokenRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.repository.UserRepository;
 import com.cloudflow.service.AccessTokenService;
@@ -22,7 +24,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
@@ -71,6 +75,15 @@ abstract class SecurityTestBase {
     NotificationDeliveryRepository deliveries;
 
     @Autowired
+    EmailVerificationTokenRepository verifications;
+
+    @Autowired
+    PasswordResetTokenRepository resets;
+
+    @MockitoBean
+    JavaMailSender mail;
+
+    @Autowired
     PasswordEncoder encoder;
 
     @Autowired
@@ -81,7 +94,19 @@ abstract class SecurityTestBase {
 
     @BeforeEach
     void emptyRepositories() {
-        reset(users, tenants, deployments, versions, events, executions, logs, preferences, deliveries);
+        reset(
+                users,
+                tenants,
+                deployments,
+                versions,
+                events,
+                executions,
+                logs,
+                preferences,
+                deliveries,
+                verifications,
+                resets,
+                mail);
         when(users.findByPublicId(any())).thenReturn(Optional.empty());
         when(users.findByTenant_IdAndEmail(any(), any())).thenReturn(Optional.empty());
         when(users.findByTenant_Id(any(), any(Pageable.class))).thenReturn(Page.empty());
@@ -97,6 +122,12 @@ abstract class SecurityTestBase {
         when(preferences.findByUser_PublicIdAndUser_Tenant_Id(any(), any())).thenReturn(Optional.empty());
         when(deliveries.findByUser_Tenant_IdAndUser_PublicId(any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty());
+        when(verifications.findByTokenHash(any())).thenReturn(Optional.empty());
+        when(verifications.consume(any(), any())).thenReturn(0);
+        when(verifications.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(resets.findByTokenHash(any())).thenReturn(Optional.empty());
+        when(resets.consume(any(), any())).thenReturn(0);
+        when(resets.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
     }
 
     Tenant tenant(long id, String slug) {

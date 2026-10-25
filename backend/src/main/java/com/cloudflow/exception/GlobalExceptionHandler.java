@@ -59,6 +59,17 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(ApiErrors.of(HttpStatus.FORBIDDEN, "Email verification required"));
     }
 
+    @ExceptionHandler(TokenRejectedException.class)
+    public ResponseEntity<ApiError> handleToken(TokenRejectedException ex) {
+        return status(HttpStatus.BAD_REQUEST);
+    }
+
+    @ExceptionHandler(MailDeliveryException.class)
+    public ResponseEntity<ApiError> handleMail(MailDeliveryException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiErrors.of(HttpStatus.SERVICE_UNAVAILABLE, "Email could not be sent"));
+    }
+
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataConflict(DataIntegrityViolationException ex) {
         log.warn("Request rejected by a database constraint");

@@ -3,10 +3,12 @@ package com.cloudflow.support;
 import com.cloudflow.repository.DeploymentEventRepository;
 import com.cloudflow.repository.DeploymentRepository;
 import com.cloudflow.repository.DeploymentVersionRepository;
+import com.cloudflow.repository.EmailVerificationTokenRepository;
 import com.cloudflow.repository.ExecutionLogRepository;
 import com.cloudflow.repository.ExecutionRepository;
 import com.cloudflow.repository.NotificationDeliveryRepository;
 import com.cloudflow.repository.NotificationPreferenceRepository;
+import com.cloudflow.repository.PasswordResetTokenRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.repository.UserRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -70,5 +72,17 @@ public class OfflineRepositoryConfiguration {
     @ConditionalOnMissingBean
     NotificationDeliveryRepository notificationDeliveryRepository() {
         return mock(NotificationDeliveryRepository.class);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    EmailVerificationTokenRepository emailVerificationTokenRepository() {
+        return mock(EmailVerificationTokenRepository.class);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PasswordResetTokenRepository passwordResetTokenRepository() {
+        return mock(PasswordResetTokenRepository.class);
     }
 }

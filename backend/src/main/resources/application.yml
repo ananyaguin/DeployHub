@@ -59,3 +59,13 @@ cloudflow:
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:true}
     cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
     worker-token: ${WORKER_TOKEN:}
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    from: ${SMTP_FROM:no-reply@localhost}
+    verification-url: ${MAIL_VERIFICATION_URL:http://localhost:5173/verify-email}
+    reset-url: ${MAIL_RESET_URL:http://localhost:5173/reset-password}
+    verification-ttl: ${MAIL_VERIFICATION_TTL:24h}
+    reset-ttl: ${MAIL_RESET_TTL:30m}

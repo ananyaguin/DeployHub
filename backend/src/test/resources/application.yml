@@ -20,3 +20,13 @@ cloudflow:
     require-verified-email: true
     cors-allowed-origins: http://localhost:5173
     worker-token: test-worker-token
+  mail:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
+    from: no-reply@localhost
+    verification-url: http://localhost:5173/verify-email
+    reset-url: http://localhost:5173/reset-password
+    verification-ttl: 24h
+    reset-ttl: 30m

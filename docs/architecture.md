@@ -33,4 +33,4 @@ Both Java modules inherit `com.cloudflow:cloudflow`, which pins Java 17 and Spri
 
 JavaScript and JSX only. Pages compose through `src/routes/AppRoutes.jsx`. There is no router library and no TypeScript. Design tokens live in `src/styles/tokens.css` and are light-theme only.
 
-`VITE_API_BASE_URL` comes from the repository-root `.env`. The shell displays that address. It does not call the API yet.
+`VITE_API_BASE_URL` comes from the repository-root `.env`. The signed-in UI calls the account, deployment, version, event, and execution endpoints. It does not send a tenant id for access checks, and it does not talk to Docker.

@@ -76,7 +76,7 @@ npm run build
 npm run lint
 ```
 
-Vite loads environment files from the repository root (`envDir` is `..`). The only variable is `VITE_API_BASE_URL`.
+Vite loads environment files from the repository root (`envDir` is `..`). The only frontend variable is `VITE_API_BASE_URL`. Sign-in, registration, email verification, password reset, and deployment screens use that API. Verification links use `/verify-email` and reset links use `/reset-password`. The browser does not receive worker or Docker credentials.
 
 ## Email
 

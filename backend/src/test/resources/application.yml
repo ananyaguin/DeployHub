@@ -1,4 +1,10 @@
 # Stage 2 web tests boot without a database. This is not H2, and it does not apply migrations.
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
 spring:
   datasource:
     url: jdbc:mysql://127.0.0.1:1/unused

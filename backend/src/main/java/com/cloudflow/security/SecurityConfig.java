@@ -12,6 +12,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -63,6 +64,17 @@ public class SecurityConfig {
     JwtDecoder jwtDecoder(SecurityProperties properties) {
         return NimbusJwtDecoder.withSecretKey(signingKey(properties))
                 .macAlgorithm(MacAlgorithm.HS256)
+                .build();
+    }
+
+    @Bean
+    @Profile("dev")
+    @Order(0)
+    SecurityFilterChain devDocsChain(HttpSecurity http) throws Exception {
+        return http.securityMatcher("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .build();
     }
 

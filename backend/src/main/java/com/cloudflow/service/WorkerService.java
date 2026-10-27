@@ -179,6 +179,7 @@ public class WorkerService {
             if (rows != 1) {
                 return;
             }
+            execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
             execution.setStatus(ExecutionStatus.FAILED);
             execution.setFinishedAt(now);
             String detail = "Stopped after " + execution.getAttemptCount() + " attempts.";
@@ -190,6 +191,7 @@ public class WorkerService {
         if (rows != 1) {
             return;
         }
+        execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
         execution.setStatus(ExecutionStatus.QUEUED);
         execution.setWorkerNode(null);
         execution.setStartedAt(null);

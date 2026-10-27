@@ -214,8 +214,9 @@ public class DeploymentService {
         Instant now = clock.instant();
         ExecutionStatus target = succeeded ? ExecutionStatus.SUCCEEDED : ExecutionStatus.FAILED;
         int won = executions.finishIfRunning(execution.getId(), worker.getId(), target, now);
+        execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
         if (won != 1) {
-            return response(executions.findById(execution.getId()).orElseThrow(NotFoundException::new));
+            return response(execution);
         }
         execution.setStatus(target);
         execution.setFinishedAt(now);
@@ -223,14 +224,16 @@ public class DeploymentService {
             try {
                 apply(execution);
             } catch (ConflictException ex) {
+                execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
                 execution.setStatus(ExecutionStatus.FAILED);
-                executions.save(execution);
+                execution.setFinishedAt(now);
                 String detail = "Deployment state changed before the worker finished.";
                 writeLog(execution, LogLevel.ERROR, detail);
                 event(execution.getDeployment(), execution.getDeploymentVersion(), "FAILED", detail + LOCAL);
                 return response(execution);
             }
         }
+        execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
         if (succeeded && containerId != null) {
             execution.getDeploymentVersion().setContainerId(containerId);
             versions.save(execution.getDeploymentVersion());

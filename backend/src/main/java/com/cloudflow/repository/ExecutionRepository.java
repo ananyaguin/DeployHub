@@ -2,6 +2,7 @@ package com.cloudflow.repository;
 
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionStatus;
+import com.cloudflow.entity.TaskType;
 import com.cloudflow.entity.WorkerNode;
 import java.time.Instant;
 import java.util.Collection;
@@ -27,6 +28,9 @@ public interface ExecutionRepository extends JpaRepository<Execution, Long> {
     Optional<Execution> findByPublicId(UUID publicId);
 
     boolean existsByDeployment_IdAndStatusIn(Long deploymentId, Collection<ExecutionStatus> statuses);
+
+    boolean existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(
+            Long deploymentId, Long versionId, ExecutionStatus status, Collection<TaskType> taskTypes);
 
     Optional<Execution> findFirstByStatusOrderByCreatedAtAsc(ExecutionStatus status);
 

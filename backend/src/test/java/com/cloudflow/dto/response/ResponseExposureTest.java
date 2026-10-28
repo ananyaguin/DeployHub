@@ -19,6 +19,7 @@ class ResponseExposureTest {
                 TenantResponse.class,
                 UserResponse.class,
                 DeploymentResponse.class,
+                DeploymentHealthResponse.class,
                 DeploymentVersionResponse.class,
                 ExecutionResponse.class,
                 ExecutionLogResponse.class,

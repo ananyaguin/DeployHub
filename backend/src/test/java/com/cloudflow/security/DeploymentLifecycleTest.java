@@ -23,7 +23,9 @@ import com.cloudflow.entity.DeploymentStatus;
 import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionStatus;
+import com.cloudflow.entity.HealthStatus;
 import com.cloudflow.entity.TaskType;
+import com.cloudflow.entity.WorkerStatus;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.entity.User;
 import com.cloudflow.entity.UserRole;
@@ -49,9 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -107,6 +111,9 @@ class DeploymentLifecycleTest extends SecurityTestBase {
                 .findFirst());
         when(versions.save(any(DeploymentVersion.class))).thenAnswer(invocation -> {
             DeploymentVersion version = invocation.getArgument(0);
+            if (version.getId() == null && version.getVersionNumber() != null) {
+                ReflectionTestUtils.setField(version, "id", version.getVersionNumber().longValue());
+            }
             history.add(version);
             versionStored.put(version.getPublicId(), version);
             return version;
@@ -298,11 +305,84 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         asUser(member, post("/api/v1/executions")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(execution(deployment, version, TaskType.DEPLOY)))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(execution(deployment, version, TaskType.ROLLBACK)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
         asUser(stranger, get("/api/v1/deployments/" + deployment.getPublicId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.slug").value("api"));
         verify(executions, never()).save(any());
+    }
+
+    @Test
+    void rollbackRequiresAPreviousSuccessfulVersion() throws Exception {
+        Deployment deployment = draft();
+        DeploymentVersion first = version(deployment);
+        version(deployment);
+        deployment.setStatus(DeploymentStatus.ACTIVE);
+        deployment.setCurrentVersionNumber(2);
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(execution(deployment, first, TaskType.ROLLBACK)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("That version has no successful deployment"));
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"deploymentId\":\"" + deployment.getPublicId()
+                                + "\",\"versionId\":\"550e8400-e29b-41d4-a716-446655440000\",\"taskType\":\"ROLLBACK\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        verify(executions, never()).saveAndFlush(any());
+        assertEquals(2, deployment.getCurrentVersionNumber());
+
+        when(executions.existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(
+                        eq(deployment.getId()), eq(first.getId()), eq(ExecutionStatus.SUCCEEDED), any()))
+                .thenReturn(true);
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(execution(deployment, first, TaskType.ROLLBACK)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.taskType").value("ROLLBACK"))
+                .andExpect(jsonPath("$.status").value("QUEUED"));
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(execution(deployment, first, TaskType.ROLLBACK)))
+                .andExpect(status().isConflict());
+        verify(executions, times(1)).saveAndFlush(any());
+        assertEquals(2, deployment.getCurrentVersionNumber());
+    }
+
+    @Test
+    void healthStaysUnknownWhenNoCheckExistsAndIgnoresWorkerAvailability() throws Exception {
+        Deployment deployment = draft();
+        mockMvc.perform(get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authentication required"));
+        asUser(member, get("/api/v1/deployments/" + UUID.randomUUID() + "/health"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.checkedAt").value(nullValue()))
+                .andExpect(jsonPath("$.detail").value(nullValue()))
+                .andExpect(jsonPath("$.failureStreak").value(0))
+                .andExpect(jsonPath("$.workerAvailable").value(false))
+                .andExpect(jsonPath("$.simulated").value(true));
+        when(workers.existsByStatusAndLastSeenAtAfter(eq(WorkerStatus.ONLINE), any())).thenReturn(true);
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UNKNOWN"))
+                .andExpect(jsonPath("$.workerAvailable").value(true))
+                .andExpect(jsonPath("$.simulated").value(true));
+        assertEquals(HealthStatus.UNKNOWN, deployment.getHealthStatus());
     }
 
     @Test

@@ -1,9 +1,12 @@
 package com.cloudflow.service;
 
+import java.time.Clock;
 import java.util.UUID;
 
+import com.cloudflow.configuration.WorkerProperties;
 import com.cloudflow.dto.request.PageQuery;
 import com.cloudflow.dto.response.DeploymentEventResponse;
+import com.cloudflow.dto.response.DeploymentHealthResponse;
 import com.cloudflow.dto.response.DeploymentResponse;
 import com.cloudflow.dto.response.DeploymentVersionResponse;
 import com.cloudflow.dto.response.ExecutionLogResponse;
@@ -15,6 +18,8 @@ import com.cloudflow.entity.Deployment;
 import com.cloudflow.entity.DeploymentEvent;
 import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
+import com.cloudflow.entity.HealthStatus;
+import com.cloudflow.entity.WorkerStatus;
 import com.cloudflow.entity.ExecutionLog;
 import com.cloudflow.entity.NotificationDelivery;
 import com.cloudflow.exception.NotFoundException;
@@ -25,6 +30,7 @@ import com.cloudflow.repository.ExecutionLogRepository;
 import com.cloudflow.repository.ExecutionRepository;
 import com.cloudflow.repository.NotificationDeliveryRepository;
 import com.cloudflow.repository.NotificationPreferenceRepository;
+import com.cloudflow.repository.worker.WorkerNodeRepository;
 import com.cloudflow.security.AuthenticatedUser;
 import com.cloudflow.security.CurrentUserAccessor;
 import org.springframework.data.domain.Page;
@@ -44,6 +50,9 @@ public class OwnedResourceService {
     private final ExecutionLogRepository logs;
     private final NotificationPreferenceRepository preferences;
     private final NotificationDeliveryRepository deliveries;
+    private final WorkerNodeRepository workers;
+    private final WorkerProperties workerProperties;
+    private final Clock clock;
 
     public OwnedResourceService(
             CurrentUserAccessor currentUser,
@@ -53,7 +62,10 @@ public class OwnedResourceService {
             ExecutionRepository executions,
             ExecutionLogRepository logs,
             NotificationPreferenceRepository preferences,
-            NotificationDeliveryRepository deliveries) {
+            NotificationDeliveryRepository deliveries,
+            WorkerNodeRepository workers,
+            WorkerProperties workerProperties,
+            Clock clock) {
         this.currentUser = currentUser;
         this.deployments = deployments;
         this.versions = versions;
@@ -62,11 +74,29 @@ public class OwnedResourceService {
         this.logs = logs;
         this.preferences = preferences;
         this.deliveries = deliveries;
+        this.workers = workers;
+        this.workerProperties = workerProperties;
+        this.clock = clock;
     }
 
     @Transactional(readOnly = true)
     public DeploymentResponse deployment(UUID publicId) {
         return deploymentResponse(requireDeployment(publicId));
+    }
+
+    @Transactional(readOnly = true)
+    public DeploymentHealthResponse health(UUID publicId) {
+        Deployment deployment = requireDeployment(publicId);
+        boolean workerAvailable = workers.existsByStatusAndLastSeenAtAfter(
+                WorkerStatus.ONLINE, clock.instant().minus(workerProperties.heartbeatTimeout()));
+        HealthStatus status = deployment.getHealthStatus() == null ? HealthStatus.UNKNOWN : deployment.getHealthStatus();
+        return new DeploymentHealthResponse(
+                status,
+                deployment.getHealthCheckedAt(),
+                deployment.getHealthDetail(),
+                deployment.getHealthFailureStreak(),
+                workerAvailable,
+                true);
     }
 
     @Transactional(readOnly = true)

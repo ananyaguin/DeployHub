@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import com.cloudflow.dto.request.PageQuery;
 import com.cloudflow.dto.response.DeploymentEventResponse;
+import com.cloudflow.dto.response.DeploymentHealthResponse;
 import com.cloudflow.dto.response.DeploymentResponse;
 import com.cloudflow.dto.response.DeploymentVersionResponse;
 import com.cloudflow.dto.response.ExecutionLogResponse;
@@ -29,6 +30,11 @@ public class OwnedResourceController {
     @GetMapping("/api/v1/deployments/{publicId}")
     public DeploymentResponse deployment(@PathVariable UUID publicId) {
         return resources.deployment(publicId);
+    }
+
+    @GetMapping("/api/v1/deployments/{publicId}/health")
+    public DeploymentHealthResponse health(@PathVariable UUID publicId) {
+        return resources.health(publicId);
     }
 
     @GetMapping("/api/v1/deployments/{deploymentId}/versions/{versionId}")

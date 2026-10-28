@@ -2,6 +2,7 @@ package com.cloudflow.worker;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -20,6 +21,7 @@ class SimulatedTaskExecutorTest {
         executor.executeType("DEPLOY");
         executor.executeType("ROLLBACK");
         executor.executeType("STOP");
+        executor.executeType("HEALTH");
         assertTrue(executor.successDetail("DEPLOY").contains("No cloud provider was contacted."));
         RecordingApi api = new RecordingApi(ClaimedTask.simple(UUID.randomUUID(), "DEPLOY", 1));
         WorkerLoop loop = loop(api, executor);
@@ -27,6 +29,21 @@ class SimulatedTaskExecutorTest {
         assertEquals(Boolean.TRUE, api.succeeded.get());
         assertTrue(api.message.get().contains("Simulated DEPLOY"));
         assertFalse(api.message.get().contains("secret-token"));
+    }
+
+    @Test
+    void healthCheckIsSimulatedAndFailsWithoutAnActiveVersion() {
+        SimulatedTaskExecutor executor = SimulatedTaskExecutor.standard();
+        TaskResult missing = executor.execute(ClaimedTask.simple(UUID.randomUUID(), "HEALTH", 1));
+        assertFalse(missing.succeeded());
+        assertTrue(missing.message().contains("No active version is deployed."));
+        assertTrue(missing.message().contains("No cloud provider was contacted."));
+        TaskResult healthy = executor.execute(new ClaimedTask(
+                UUID.randomUUID(), "HEALTH", 1, UUID.randomUUID(), UUID.randomUUID(), 2, null, Map.of(), 2, null, true));
+        assertTrue(healthy.succeeded());
+        assertTrue(healthy.message().contains("Simulated HEALTH"));
+        assertTrue(healthy.message().contains("No cloud provider was contacted."));
+        assertFalse(healthy.message().contains("secret-token"));
     }
 
     @Test

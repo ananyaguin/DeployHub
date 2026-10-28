@@ -38,6 +38,7 @@ public final class DockerTaskExecutor implements DeploymentExecutor {
             return switch (task.taskType()) {
                 case "DEPLOY", "ROLLBACK" -> replace(task);
                 case "STOP" -> stop(task);
+                case "HEALTH" -> TaskResult.failed("Health checks are simulated and do not use Docker.");
                 default -> TaskResult.failed("Unsupported task.");
             };
         } catch (DockerAccessException ex) {

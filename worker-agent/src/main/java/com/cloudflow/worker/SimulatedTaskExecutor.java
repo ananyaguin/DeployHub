@@ -16,12 +16,16 @@ public final class SimulatedTaskExecutor implements DeploymentExecutor {
 
     public static SimulatedTaskExecutor standard() {
         return new SimulatedTaskExecutor(
-                List.of(new DeployTaskHandler(), new RollbackTaskHandler(), new StopTaskHandler()));
+                List.of(new DeployTaskHandler(), new RollbackTaskHandler(), new StopTaskHandler(), new HealthTaskHandler()));
     }
 
     @Override
     public TaskResult execute(ClaimedTask task) {
         try {
+            if ("HEALTH".equals(task.taskType()) && task.currentVersion() == null) {
+                return TaskResult.failed(
+                        "Simulated health check failed. No active version is deployed. No cloud provider was contacted.");
+            }
             executeType(task.taskType());
             return TaskResult.ok(successDetail(task.taskType()), null);
         } catch (RuntimeException ex) {

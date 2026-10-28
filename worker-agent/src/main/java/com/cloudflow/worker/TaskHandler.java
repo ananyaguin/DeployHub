@@ -33,6 +33,19 @@ final class RollbackTaskHandler implements TaskHandler {
     }
 }
 
+final class HealthTaskHandler implements TaskHandler {
+
+    @Override
+    public String taskType() {
+        return "HEALTH";
+    }
+
+    @Override
+    public void execute() {
+        // SimulatedTaskExecutor owns the outcome. This handler does not probe a cloud service.
+    }
+}
+
 final class StopTaskHandler implements TaskHandler {
 
     @Override

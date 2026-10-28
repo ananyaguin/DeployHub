@@ -141,7 +141,12 @@ abstract class SecurityTestBase {
         when(executions.findFirstByStatusOrderByCreatedAtAsc(any())).thenReturn(Optional.empty());
         when(executions.findByStatus(any())).thenReturn(List.of());
         when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenReturn(false);
+        when(executions.existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(any(), any(), any(), any()))
+                .thenReturn(false);
+        when(versions.findByDeployment_IdAndVersionNumberLessThanOrderByVersionNumberDesc(any(), any()))
+                .thenReturn(List.of());
         when(workers.findByName(any())).thenReturn(Optional.empty());
+        when(workers.existsByStatusAndLastSeenAtAfter(any(), any())).thenReturn(false);
         when(workers.findByPublicId(any())).thenReturn(Optional.empty());
         when(workers.markStale(any())).thenReturn(0);
         when(logs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

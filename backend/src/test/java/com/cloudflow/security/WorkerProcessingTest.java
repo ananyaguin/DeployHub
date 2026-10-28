@@ -22,6 +22,7 @@ import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionLog;
 import com.cloudflow.entity.ExecutionStatus;
+import com.cloudflow.entity.HealthStatus;
 import com.cloudflow.entity.TaskType;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.entity.User;
@@ -112,10 +113,23 @@ class WorkerProcessingTest extends SecurityTestBase {
                 .thenAnswer(invocation -> claimDeployment(invocation.getArguments(), false));
         when(versions.save(any(DeploymentVersion.class))).thenAnswer(invocation -> {
             DeploymentVersion version = invocation.getArgument(0);
+            if (version.getId() == null && version.getVersionNumber() != null) {
+                ReflectionTestUtils.setField(version, "id", version.getVersionNumber().longValue());
+            }
             versionCount = version.getVersionNumber();
             versionById.put(version.getPublicId(), version);
             return version;
         });
+        when(versions.findByDeployment_IdAndVersionNumberLessThanOrderByVersionNumberDesc(any(), any()))
+                .thenAnswer(invocation -> {
+                    Long deploymentId = invocation.getArgument(0);
+                    int number = invocation.getArgument(1);
+                    return versionById.values().stream()
+                            .filter(version -> deploymentId.equals(version.getDeployment().getId())
+                                    && version.getVersionNumber() < number)
+                            .sorted(Comparator.comparing(DeploymentVersion::getVersionNumber).reversed())
+                            .toList();
+                });
         when(versions.findMaxVersionNumber(any())).thenAnswer(invocation -> versionCount == 0 ? null : versionCount);
         when(versions.findByPublicIdAndDeployment_Tenant_Id(any(), any())).thenAnswer(invocation -> {
             DeploymentVersion version = versionById.get(invocation.getArgument(0));
@@ -134,6 +148,19 @@ class WorkerProcessingTest extends SecurityTestBase {
         };
         when(executions.save(any(Execution.class))).thenAnswer(keepExecution);
         when(executions.saveAndFlush(any(Execution.class))).thenAnswer(keepExecution);
+        when(executions.existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    Long deploymentId = invocation.getArgument(0);
+                    Long versionId = invocation.getArgument(1);
+                    ExecutionStatus status = invocation.getArgument(2);
+                    Collection<?> types = invocation.getArgument(3);
+                    synchronized (rows) {
+                        return rows.stream().anyMatch(row -> deploymentId.equals(row.getDeployment().getId())
+                                && versionId.equals(row.getDeploymentVersion().getId())
+                                && row.getStatus() == status
+                                && types.contains(row.getTaskType()));
+                    }
+                });
         when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenAnswer(invocation -> {
             Long id = invocation.getArgument(0);
             Collection<?> statuses = invocation.getArgument(1);
@@ -282,8 +309,12 @@ class WorkerProcessingTest extends SecurityTestBase {
         Deployment deployment = draft("api");
         DeploymentVersion first = version(deployment);
         DeploymentVersion second = version(deployment);
-        String queued = queue(deployment, second, TaskType.DEPLOY);
+        String firstQueued = queue(deployment, first, TaskType.DEPLOY);
         register("worker-1");
+        claim();
+        finish(firstQueued, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        assertEquals(1, deployment.getCurrentVersionNumber());
+        String queued = queue(deployment, second, TaskType.DEPLOY);
         mockMvc.perform(post("/api/v1/worker/tasks/claim")
                         .header(AUTHORIZATION, WORKER)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -318,7 +349,87 @@ class WorkerProcessingTest extends SecurityTestBase {
                         .content(executionBody(deployment, first, TaskType.DEPLOY)))
                 .andExpect(status().isConflict());
         verify(deployments, times(1)).claimFromNew(any(), any(), any(), any());
-        verify(deployments, times(2)).claimFromVersion(any(), any(), any(), any(), any());
+        verify(deployments, times(3)).claimFromVersion(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void simulatedHealthRecordsResultsAndRollsBackOnce() throws Exception {
+        Deployment deployment = draft("api");
+        DeploymentVersion first = version(deployment);
+        DeploymentVersion second = version(deployment);
+        String firstDeploy = queue(deployment, first, TaskType.DEPLOY);
+        register("worker-1");
+        claim();
+        finish(firstDeploy, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        String secondDeploy = queue(deployment, second, TaskType.DEPLOY);
+        claim();
+        finish(secondDeploy, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        assertEquals(2, deployment.getCurrentVersionNumber());
+
+        String check = queue(deployment, second, TaskType.HEALTH);
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(executionBody(deployment, second, TaskType.HEALTH)))
+                .andExpect(status().isConflict());
+        claim();
+        finish(check, true, "Simulated HEALTH completed. No cloud provider was contacted.");
+        finish(check, true, "Simulated HEALTH completed. No cloud provider was contacted.");
+        mockMvc.perform(post("/api/v1/worker/tasks/" + check + "/result")
+                        .header(AUTHORIZATION, WORKER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"worker-1\",\"succeeded\":false,\"message\":\"opposite\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(HealthStatus.HEALTHY, deployment.getHealthStatus());
+        assertEquals(0, deployment.getHealthFailureStreak());
+        assertEquals(2, deployment.getCurrentVersionNumber());
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("HEALTHY"))
+                .andExpect(jsonPath("$.simulated").value(true))
+                .andExpect(jsonPath("$.workerAvailable").value(false))
+                .andExpect(jsonPath("$.failureStreak").value(0))
+                .andExpect(jsonPath("$.detail").value(containsString("Simulated")));
+
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            String failed = queue(deployment, second, TaskType.HEALTH);
+            claim();
+            finish(failed, false, "Simulated HEALTH failed. No cloud provider was contacted.");
+            assertEquals(HealthStatus.UNHEALTHY, deployment.getHealthStatus());
+            assertEquals(attempt, deployment.getHealthFailureStreak());
+            assertEquals(2, deployment.getCurrentVersionNumber());
+            assertEquals(0, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.QUEUED).count());
+        }
+
+        String third = queue(deployment, second, TaskType.HEALTH);
+        claim();
+        finish(third, false, "Simulated HEALTH failed. No cloud provider was contacted.");
+        assertEquals(3, deployment.getHealthFailureStreak());
+        assertEquals(2, deployment.getCurrentVersionNumber());
+        assertEquals(1, rows.stream().filter(row -> row.getTaskType() == TaskType.ROLLBACK
+                && row.getStatus() == ExecutionStatus.QUEUED).count());
+
+        Execution rollback = rows.stream()
+                .filter(row -> row.getTaskType() == TaskType.ROLLBACK && row.getStatus() == ExecutionStatus.QUEUED)
+                .findFirst()
+                .orElseThrow();
+        claim();
+        finish(rollback.getPublicId().toString(), false, "Simulated ROLLBACK failed. No cloud provider was contacted.");
+        assertEquals(2, deployment.getCurrentVersionNumber());
+        assertEquals(HealthStatus.UNHEALTHY, deployment.getHealthStatus());
+
+        String fourth = queue(deployment, second, TaskType.HEALTH);
+        claim();
+        finish(fourth, false, "Simulated HEALTH failed. No cloud provider was contacted.");
+        assertEquals(4, deployment.getHealthFailureStreak());
+        assertEquals(2, deployment.getCurrentVersionNumber());
+        assertEquals(1, rows.stream().filter(row -> row.getTaskType() == TaskType.ROLLBACK).count());
+        assertEquals(0, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.QUEUED).count());
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UNHEALTHY"))
+                .andExpect(jsonPath("$.simulated").value(true))
+                .andExpect(jsonPath("$.workerAvailable").value(false))
+                .andExpect(jsonPath("$.failureStreak").value(4));
     }
 
     @Test

@@ -1,5 +1,7 @@
 package com.cloudflow.entity;
 
+import java.time.Instant;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -33,6 +35,19 @@ public class Deployment extends TimestampedPublicEntity {
 
     @Column(name = "current_version_number")
     private Integer currentVersionNumber;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "health_status", nullable = false, length = 16)
+    private HealthStatus healthStatus = HealthStatus.UNKNOWN;
+
+    @Column(name = "health_checked_at")
+    private Instant healthCheckedAt;
+
+    @Column(name = "health_detail", length = 500)
+    private String healthDetail;
+
+    @Column(name = "health_failure_streak", nullable = false)
+    private int healthFailureStreak;
 
     public Tenant getTenant() {
         return tenant;
@@ -72,5 +87,37 @@ public class Deployment extends TimestampedPublicEntity {
 
     public void setCurrentVersionNumber(Integer currentVersionNumber) {
         this.currentVersionNumber = currentVersionNumber;
+    }
+
+    public HealthStatus getHealthStatus() {
+        return healthStatus;
+    }
+
+    public void setHealthStatus(HealthStatus healthStatus) {
+        this.healthStatus = healthStatus;
+    }
+
+    public Instant getHealthCheckedAt() {
+        return healthCheckedAt;
+    }
+
+    public void setHealthCheckedAt(Instant healthCheckedAt) {
+        this.healthCheckedAt = healthCheckedAt;
+    }
+
+    public String getHealthDetail() {
+        return healthDetail;
+    }
+
+    public void setHealthDetail(String healthDetail) {
+        this.healthDetail = healthDetail;
+    }
+
+    public int getHealthFailureStreak() {
+        return healthFailureStreak;
+    }
+
+    public void setHealthFailureStreak(int healthFailureStreak) {
+        this.healthFailureStreak = healthFailureStreak;
     }
 }

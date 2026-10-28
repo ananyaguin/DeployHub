@@ -20,6 +20,8 @@ public interface WorkerNodeRepository extends JpaRepository<WorkerNode, Long> {
 
     Page<WorkerNode> findByStatus(WorkerStatus status, Pageable pageable);
 
+    boolean existsByStatusAndLastSeenAtAfter(WorkerStatus status, Instant seenAfter);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update WorkerNode w

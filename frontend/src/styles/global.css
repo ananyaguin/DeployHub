@@ -444,18 +444,21 @@ button:disabled {
 .badge-RUNNING,
 .badge-DEPLOY,
 .badge-ROLLBACK,
-.badge-STOP {
+.badge-STOP,
+.badge-HEALTH {
   background: var(--cf-accent-soft);
   color: var(--cf-accent);
 }
 
 .badge-SUCCEEDED,
-.badge-VERSION_CREATED {
+.badge-VERSION_CREATED,
+.badge-HEALTHY {
   background: #e7f6ec;
   color: #146c36;
 }
 
-.badge-FAILED {
+.badge-FAILED,
+.badge-UNHEALTHY {
   background: #fdecea;
   color: #9c2b20;
 }

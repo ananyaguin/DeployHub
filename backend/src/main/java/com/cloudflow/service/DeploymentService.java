@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,7 @@ import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionLog;
 import com.cloudflow.entity.ExecutionStatus;
+import com.cloudflow.entity.HealthStatus;
 import com.cloudflow.entity.LogLevel;
 import com.cloudflow.entity.TaskType;
 import com.cloudflow.entity.WorkerNode;
@@ -185,6 +187,7 @@ public class DeploymentService {
             case DEPLOY -> change(deployment, version, TaskType.DEPLOY);
             case ROLLBACK -> change(deployment, version, TaskType.ROLLBACK);
             case STOP -> change(deployment, version, TaskType.STOP);
+            case HEALTH -> change(deployment, version, TaskType.HEALTH);
         };
     }
 
@@ -194,6 +197,7 @@ public class DeploymentService {
             case DEPLOY -> deploy(deployment, version, current);
             case ROLLBACK -> rollback(deployment, version, current);
             case STOP -> stop(deployment, version, current);
+            case HEALTH -> healthCheck(deployment, version, current);
         }
         deployments.findByIdForUpdate(deployment.getId()).orElseThrow(NotFoundException::new);
         if (executions.existsByDeployment_IdAndStatusIn(deployment.getId(), OPEN)) {
@@ -229,7 +233,7 @@ public class DeploymentService {
         }
         execution.setStatus(target);
         execution.setFinishedAt(now);
-        if (succeeded) {
+        if (succeeded && execution.getTaskType() != TaskType.HEALTH) {
             try {
                 apply(execution);
             } catch (ConflictException ex) {
@@ -243,11 +247,14 @@ public class DeploymentService {
             }
         }
         execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
-        if (succeeded && containerId != null) {
+        if (succeeded && containerId != null && execution.getTaskType() != TaskType.HEALTH) {
             execution.getDeploymentVersion().setContainerId(containerId);
             versions.save(execution.getDeploymentVersion());
         }
         String detail = sanitize(message);
+        if (execution.getTaskType() == TaskType.HEALTH) {
+            recordSimulatedHealth(execution, succeeded, detail);
+        }
         writeLog(execution, succeeded ? LogLevel.INFO : LogLevel.ERROR, detail);
         event(
                 execution.getDeployment(),
@@ -265,13 +272,24 @@ public class DeploymentService {
         return DeploymentStatus.ACTIVE;
     }
 
-    private static DeploymentStatus rollback(Deployment deployment, DeploymentVersion version, Integer current) {
+    private DeploymentStatus rollback(Deployment deployment, DeploymentVersion version, Integer current) {
         if (deployment.getStatus() != DeploymentStatus.ACTIVE
                 || current == null
                 || version.getVersionNumber() >= current) {
             throw new ConflictException(STATE);
         }
+        if (!previouslySucceeded(deployment, version)) {
+            throw new ConflictException("That version has no successful deployment");
+        }
         return DeploymentStatus.ACTIVE;
+    }
+
+    private static void healthCheck(Deployment deployment, DeploymentVersion version, Integer current) {
+        if (deployment.getStatus() != DeploymentStatus.ACTIVE
+                || current == null
+                || !current.equals(version.getVersionNumber())) {
+            throw new ConflictException(STATE);
+        }
     }
 
     private static DeploymentStatus stop(Deployment deployment, DeploymentVersion version, Integer current) {
@@ -281,6 +299,72 @@ public class DeploymentService {
             throw new ConflictException(STATE);
         }
         return DeploymentStatus.ARCHIVED;
+    }
+
+    private boolean previouslySucceeded(Deployment deployment, DeploymentVersion version) {
+        if (deployment.getId() == null || version.getId() == null) {
+            return false;
+        }
+        return executions.existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(
+                deployment.getId(),
+                version.getId(),
+                ExecutionStatus.SUCCEEDED,
+                EnumSet.of(TaskType.DEPLOY, TaskType.ROLLBACK));
+    }
+
+    private void recordSimulatedHealth(Execution execution, boolean succeeded, String detail) {
+        String storedDetail = detail.length() > 500 ? detail.substring(0, 500) : detail;
+        Deployment deployment = execution.getDeployment();
+        deployment.setHealthCheckedAt(clock.instant());
+        deployment.setHealthDetail(storedDetail);
+        if (succeeded) {
+            deployment.setHealthStatus(HealthStatus.HEALTHY);
+            deployment.setHealthFailureStreak(0);
+        } else {
+            int streak = deployment.getHealthFailureStreak() + 1;
+            deployment.setHealthFailureStreak(streak);
+            deployment.setHealthStatus(HealthStatus.UNHEALTHY);
+            if (streak == 3) {
+                recoverOnce(deployment);
+            }
+        }
+        deployments.save(deployment);
+    }
+
+    private void recoverOnce(Deployment deployment) {
+        Integer current = deployment.getCurrentVersionNumber();
+        if (deployment.getStatus() != DeploymentStatus.ACTIVE || current == null) {
+            return;
+        }
+        List<DeploymentVersion> earlier = versions
+                .findByDeployment_IdAndVersionNumberLessThanOrderByVersionNumberDesc(deployment.getId(), current);
+        if (earlier == null) {
+            return;
+        }
+        for (DeploymentVersion candidate : earlier) {
+            if (!previouslySucceeded(deployment, candidate)) {
+                continue;
+            }
+            try {
+                queue(deployment, candidate, TaskType.ROLLBACK);
+            } catch (ConflictException ex) {
+                event(
+                        deployment,
+                        candidate,
+                        "UNHEALTHY",
+                        "Simulated health failed 3 times. Rollback was not queued." + LOCAL);
+                return;
+            }
+            event(
+                    deployment,
+                    candidate,
+                    "UNHEALTHY",
+                    "Simulated health failed 3 times. Queued rollback to version "
+                            + candidate.getVersionNumber()
+                            + "."
+                            + LOCAL);
+            return;
+        }
     }
 
     private void claim(
@@ -307,6 +391,7 @@ public class DeploymentService {
             case DEPLOY -> deploy(deployment, version, current);
             case ROLLBACK -> rollback(deployment, version, current);
             case STOP -> stop(deployment, version, current);
+            case HEALTH -> throw new ConflictException(STATE);
         };
         Integer nextVersion = execution.getTaskType() == TaskType.STOP ? current : version.getVersionNumber();
         claim(deployment, deployment.getStatus(), current, next, nextVersion);

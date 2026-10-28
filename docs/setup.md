@@ -92,9 +92,71 @@ Then export `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, an empty `SMTP_USERNAME`, a
 
 Production should set a real host, port 587 with STARTTLS, a mailbox user and password, and HTTPS frontend URLs. Do not commit those values. Rate-limit the public verification and reset endpoints at the reverse proxy, as described in `docs/security.md`.
 
-## Not built yet
+## Environment
 
-- Docker Compose
-- GitHub Actions
+Copy `.env.example` to `.env`. Real values stay in `.env` or the shell. `.env` is gitignored. Do not commit JWT secrets, database passwords, SMTP passwords, or worker tokens.
+
+The API does not start unless these are set. `application.yml` has no defaults for them:
+
+- `SPRING_DATASOURCE_URL`
+- `SPRING_DATASOURCE_USERNAME`
+- `SPRING_DATASOURCE_PASSWORD`
+- `JWT_SECRET` (at least 32 bytes)
+
+`WORKER_TOKEN` defaults to empty, which rejects every worker. Set the same value for the API and the worker. The worker reads `WORKER_BACKEND_URL` (default `http://localhost:8080`), `WORKER_NAME`, `WORKER_EXECUTOR` (default `simulator`), and the Docker limit variables.
+
+The frontend reads one variable, `VITE_API_BASE_URL`, when Vite builds or serves the app. The fallback in code is `http://localhost:8080`.
+
+Profiles stay separate. Leave `SPRING_PROFILES_ACTIVE` unset for the default log level and Swagger off. `dev` turns Swagger on and logs `com.cloudflow` at debug. `prod` only quiets logs. Neither profile changes the schema. Flyway still owns the tables.
+
+Local processes, from the repository root, with JDK 17 and those variables exported:
+
+```bash
+mvn -pl backend spring-boot:run
+```
+
+```bash
+mvn -pl worker-agent spring-boot:run
+```
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 Database setup is in `docs/database.md`. Hibernate does not create tables. Flyway does, from `backend/src/main/resources/db/migration`.
+
+## GitHub Actions
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`.
+
+- The backend job installs Temurin 17, caches Maven dependencies, and runs `mvn verify` from the repository root. That verifies `backend` and `worker-agent`. The test configuration disables the datasource, JPA, and Flyway, so this job does not need MySQL, SMTP, Docker, or repository secrets.
+- The frontend job installs Node.js 22, caches from `frontend/package-lock.json`, then runs `npm ci`, `npm run lint`, and `npm run build` in `frontend/`.
+
+A workflow file in the repository is not a passing Actions run. The Actions tab is green only after GitHub has executed it.
+
+## Compose
+
+`docker-compose.yml` starts MySQL 8.0, the API, the worker, and the frontend. MySQL is a new database named `cloudflow` on the Compose network. Port 3306 is not published, and the JDBC host inside Compose is `mysql`, not `127.0.0.1`. That keeps the host MySQL database, including an existing `deployhub` schema, out of this stack. `docker compose down` leaves the Compose volume in place. `docker compose down -v` deletes that volume only.
+
+The worker uses `WORKER_BACKEND_URL=http://backend:8080`, the same `WORKER_TOKEN` as the API, and `WORKER_EXECUTOR=simulator`. The Docker socket is not mounted. This stack does not run worker Docker mode and does not deploy to a cloud.
+
+Build the jars and the frontend first. The browser calls the published API port, so the frontend build must use `http://localhost:8080`:
+
+```bash
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk-17.jdk/Contents/Home
+mvn -DskipTests package
+cd frontend
+VITE_API_BASE_URL=http://localhost:8080 npm run build
+```
+
+Then, from the repository root, with `JWT_SECRET`, `WORKER_TOKEN`, `COMPOSE_MYSQL_PASSWORD`, and `COMPOSE_MYSQL_ROOT_PASSWORD` set:
+
+```bash
+docker compose up --build
+curl -s http://127.0.0.1:8080/api/v1/health
+docker compose down
+```
+
+The API image is the backend jar on Java 17. Curl is installed there so Compose can call `GET /api/v1/health`. The frontend image is nginx serving `frontend/dist`, and `/verify-email` and `/reset-password` fall back to `index.html`. Compose was not run in the environment where these files were added, because Docker was not installed. Do not treat the stack as verified until those commands succeed.

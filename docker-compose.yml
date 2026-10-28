@@ -1,0 +1,70 @@
+# Local stack with its own MySQL. It does not use the host database on port 3306.
+# Build jars and frontend/dist before `docker compose up --build`. See docs/setup.md.
+
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: cloudflow
+      MYSQL_USER: cloudflow
+      MYSQL_PASSWORD: ${COMPOSE_MYSQL_PASSWORD:?Set COMPOSE_MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${COMPOSE_MYSQL_ROOT_PASSWORD:?Set COMPOSE_MYSQL_ROOT_PASSWORD}
+    volumes:
+      - cloudflow-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/cloudflow?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
+      SPRING_DATASOURCE_USERNAME: cloudflow
+      SPRING_DATASOURCE_PASSWORD: ${COMPOSE_MYSQL_PASSWORD:?Set COMPOSE_MYSQL_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN}
+      CORS_ALLOWED_ORIGINS: http://localhost:5173
+      SMTP_HOST: ""
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  worker-agent:
+    build: ./worker-agent
+    environment:
+      WORKER_BACKEND_URL: http://backend:8080
+      WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN}
+      WORKER_NAME: worker-1
+      WORKER_EXECUTOR: simulator
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+
+volumes:
+  cloudflow-mysql:

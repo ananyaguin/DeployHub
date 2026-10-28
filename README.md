@@ -43,4 +43,4 @@ The API listens on port 8080. `GET /api/v1/health` returns `{"status":"UP"}`. Ac
 
 The worker jar starts and then exits. It has no web server and no work to wait on.
 
-Git remotes were left unchanged. There is no remote on this repository.
+Git remote `origin` points at GitHub. `.github/workflows/ci.yml` defines CI. A passing local build does not mean the Actions run has succeeded.

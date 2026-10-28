@@ -8,9 +8,12 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import com.cloudflow.dto.request.CreateExecutionRequest;
 import com.cloudflow.entity.Deployment;
@@ -26,6 +29,8 @@ import com.cloudflow.entity.User;
 import com.cloudflow.entity.UserRole;
 import com.cloudflow.exception.ConflictException;
 import com.cloudflow.service.DeploymentService;
+import org.mockito.stubbing.Answer;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.invocation.InvocationOnMock;
@@ -97,6 +102,9 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         when(deployments.claimFromNew(any(), any(), any(), any())).thenAnswer(invocation -> claim(invocation, true));
         when(deployments.claimFromVersion(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> claim(invocation, false));
+        when(deployments.findByIdForUpdate(any())).thenAnswer(invocation -> stored.values().stream()
+                .filter(deployment -> invocation.getArgument(0).equals(deployment.getId()))
+                .findFirst());
         when(versions.save(any(DeploymentVersion.class))).thenAnswer(invocation -> {
             DeploymentVersion version = invocation.getArgument(0);
             history.add(version);
@@ -116,13 +124,24 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         });
         when(versions.findByDeployment_Tenant_IdAndDeployment_PublicId(any(), any(), any()))
                 .thenAnswer(invocation -> new PageImpl<>(List.copyOf(history)));
-        when(executions.save(any(Execution.class))).thenAnswer(invocation -> {
+        Answer<Execution> keepOpenExecution = invocation -> {
             Execution execution = invocation.getArgument(0);
             synchronized (executionRows) {
+                boolean open = execution.getStatus() == ExecutionStatus.QUEUED
+                        || execution.getStatus() == ExecutionStatus.RUNNING;
+                boolean duplicate = open && executionRows.stream().anyMatch(row ->
+                        execution.getDeployment().getId().equals(row.getDeployment().getId())
+                                && (row.getStatus() == ExecutionStatus.QUEUED
+                                        || row.getStatus() == ExecutionStatus.RUNNING));
+                if (duplicate) {
+                    throw new DataIntegrityViolationException("uq_executions_one_open_deployment");
+                }
                 executionRows.add(execution);
+                return execution;
             }
-            return execution;
-        });
+        };
+        when(executions.save(any(Execution.class))).thenAnswer(keepOpenExecution);
+        when(executions.saveAndFlush(any(Execution.class))).thenAnswer(keepOpenExecution);
         when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenAnswer(invocation -> {
             Long id = invocation.getArgument(0);
             Collection<?> statuses = invocation.getArgument(1);
@@ -287,9 +306,22 @@ class DeploymentLifecycleTest extends SecurityTestBase {
     }
 
     @Test
-    void concurrentDeploysClaimTheDeploymentOnce() throws Exception {
+    void concurrentQueuesLeaveOneOpenExecution() throws Exception {
         Deployment deployment = draft();
         DeploymentVersion version = version(deployment);
+        CyclicBarrier bothChecked = new CyclicBarrier(2);
+        AtomicInteger checks = new AtomicInteger();
+        when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenAnswer(invocation -> {
+            if (checks.incrementAndGet() <= 2) {
+                bothChecked.await(5, TimeUnit.SECONDS);
+            }
+            Long id = invocation.getArgument(0);
+            Collection<?> statuses = invocation.getArgument(1);
+            synchronized (executionRows) {
+                return executionRows.stream()
+                        .anyMatch(row -> id.equals(row.getDeployment().getId()) && statuses.contains(row.getStatus()));
+            }
+        });
         CreateExecutionRequest request = new CreateExecutionRequest(
                 deployment.getPublicId().toString(), version.getPublicId().toString(), TaskType.DEPLOY);
         ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -299,7 +331,8 @@ class DeploymentLifecycleTest extends SecurityTestBase {
         start.countDown();
         int queued = (first.get() ? 1 : 0) + (second.get() ? 1 : 0);
         pool.shutdown();
-        assertTrue(queued >= 1 && queued <= 2);
+        assertEquals(1, queued);
+        assertEquals(1, executionRows.size());
         assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
         assertTrue(executionRows.stream().allMatch(row -> row.getStatus() == ExecutionStatus.QUEUED));
     }

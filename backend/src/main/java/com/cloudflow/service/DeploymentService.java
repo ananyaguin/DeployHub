@@ -43,6 +43,7 @@ import com.cloudflow.repository.ExecutionRepository;
 import com.cloudflow.repository.TenantRepository;
 import com.cloudflow.security.AuthenticatedUser;
 import com.cloudflow.security.CurrentUserAccessor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -194,7 +195,7 @@ public class DeploymentService {
             case ROLLBACK -> rollback(deployment, version, current);
             case STOP -> stop(deployment, version, current);
         }
-        // ponytail: check-then-insert. Two concurrent queues can both pass; the later completion fails the deployment claim.
+        deployments.findByIdForUpdate(deployment.getId()).orElseThrow(NotFoundException::new);
         if (executions.existsByDeployment_IdAndStatusIn(deployment.getId(), OPEN)) {
             throw new ConflictException(STATE);
         }
@@ -229,7 +230,7 @@ public class DeploymentService {
                 execution.setFinishedAt(now);
                 String detail = "Deployment state changed before the worker finished.";
                 writeLog(execution, LogLevel.ERROR, detail);
-                event(execution.getDeployment(), execution.getDeploymentVersion(), "FAILED", detail + LOCAL);
+                event(execution.getDeployment(), execution.getDeploymentVersion(), "FAILED", noted(detail));
                 return response(execution);
             }
         }
@@ -244,7 +245,7 @@ public class DeploymentService {
                 execution.getDeployment(),
                 execution.getDeploymentVersion(),
                 succeeded ? "SUCCEEDED" : "FAILED",
-                detail + LOCAL);
+                noted(detail));
         return response(execution);
     }
 
@@ -311,7 +312,11 @@ public class DeploymentService {
         execution.setStatus(ExecutionStatus.QUEUED);
         execution.setAttemptCount(0);
         execution.assignIdentity();
-        execution = executions.save(execution);
+        try {
+            execution = executions.saveAndFlush(execution);
+        } catch (DataIntegrityViolationException ex) {
+            throw new ConflictException(STATE);
+        }
         event(deployment, version, "QUEUED", "Queued " + task + " for a worker." + LOCAL);
         return response(execution);
     }
@@ -323,6 +328,10 @@ public class DeploymentService {
         row.setLevel(level);
         row.setMessage(message);
         logs.save(row);
+    }
+
+    private static String noted(String detail) {
+        return detail.contains("No cloud provider was contacted") ? detail : detail + LOCAL;
     }
 
     static String sanitize(String message) {

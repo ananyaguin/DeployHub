@@ -43,6 +43,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,6 +101,12 @@ class WorkerProcessingTest extends SecurityTestBase {
             return Optional.of(stored);
         });
         when(deployments.findByTenant_IdAndSlug(any(), any())).thenReturn(Optional.empty());
+        when(deployments.findByIdForUpdate(any())).thenAnswer(invocation -> {
+            if (stored == null || !invocation.getArgument(0).equals(stored.getId())) {
+                return Optional.empty();
+            }
+            return Optional.of(stored);
+        });
         when(deployments.claimFromNew(any(), any(), any(), any())).thenAnswer(invocation -> claimDeployment(invocation.getArguments(), true));
         when(deployments.claimFromVersion(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> claimDeployment(invocation.getArguments(), false));
@@ -117,14 +124,16 @@ class WorkerProcessingTest extends SecurityTestBase {
             }
             return Optional.of(version);
         });
-        when(executions.save(any(Execution.class))).thenAnswer(invocation -> {
+        org.mockito.stubbing.Answer<Execution> keepExecution = invocation -> {
             Execution execution = invocation.getArgument(0);
             if (execution.getId() == null) {
                 ReflectionTestUtils.setField(execution, "id", executionIds.incrementAndGet());
                 rows.add(execution);
             }
             return execution;
-        });
+        };
+        when(executions.save(any(Execution.class))).thenAnswer(keepExecution);
+        when(executions.saveAndFlush(any(Execution.class))).thenAnswer(keepExecution);
         when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenAnswer(invocation -> {
             Long id = invocation.getArgument(0);
             Collection<?> statuses = invocation.getArgument(1);
@@ -283,6 +292,13 @@ class WorkerProcessingTest extends SecurityTestBase {
                 .andExpect(jsonPath("$.taskType").value("DEPLOY"))
                 .andExpect(jsonPath("$.attempt").value(1));
         finish(queued, true, "Simulated DEPLOY completed. No cloud provider was contacted.", CONTAINER);
+        org.mockito.ArgumentCaptor<DeploymentEvent> savedEvents = org.mockito.ArgumentCaptor.forClass(DeploymentEvent.class);
+        verify(events, atLeastOnce()).save(savedEvents.capture());
+        assertTrue(savedEvents.getAllValues().stream().anyMatch(event ->
+                "SUCCEEDED".equals(event.getEventType())
+                        && "Simulated DEPLOY completed. No cloud provider was contacted.".equals(event.getMessage())));
+        assertTrue(savedEvents.getAllValues().stream().noneMatch(event ->
+                event.getMessage().contains("contacted. No cloud provider was contacted")));
         assertEquals(DeploymentStatus.ACTIVE, deployment.getStatus());
         assertEquals(CONTAINER, second.getContainerId());
         assertEquals(2, deployment.getCurrentVersionNumber());

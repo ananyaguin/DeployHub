@@ -202,7 +202,7 @@ class AccountRecoveryTest extends SecurityTestBase {
     }
 
     @Test
-    void unknownResetRequestMatchesAKnownAccountAndHidesMailFailure() throws Exception {
+    void unknownResetMatchesSuccessfulDeliveryAndFailureDoesNotClaimSuccess() throws Exception {
         User owner = user(tenant(1L, "acme"), "ada@example.com", UserRole.OWNER, true);
         when(tenants.findBySlug("acme")).thenReturn(Optional.of(owner.getTenant()));
         String unknown = resetResponse("missing@example.com");
@@ -210,11 +210,24 @@ class AccountRecoveryTest extends SecurityTestBase {
         verify(mail, never()).send(any(SimpleMailMessage.class));
 
         when(users.findByTenant_IdAndEmail(1L, "ada@example.com")).thenReturn(Optional.of(owner));
+        String sent = resetResponse("ada@example.com");
+        assertEquals(unknown, sent);
+        assertFalse(sent.contains("ada@example.com"));
+        verify(mail).send(any(SimpleMailMessage.class));
+        verify(resets).save(any());
+
         doThrow(new MailSendException("smtp-secret-password")).when(mail).send(any(SimpleMailMessage.class));
-        String failed = resetResponse("ada@example.com");
-        assertEquals(unknown, failed);
+        String failed = mockMvc.perform(post("/api/v1/auth/password-reset")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"tenantSlug\":\"acme\",\"email\":\"ada@example.com\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.message").value("Email could not be sent"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
         assertFalse(failed.contains("smtp-secret-password"));
         assertFalse(failed.contains("ada@example.com"));
+        verify(resets).save(any());
     }
 
     @Test

@@ -31,7 +31,6 @@ import com.cloudflow.exception.AuthenticationFailedException;
 import com.cloudflow.exception.ConflictException;
 import com.cloudflow.exception.EmailNotVerifiedException;
 import com.cloudflow.exception.ForbiddenException;
-import com.cloudflow.exception.MailDeliveryException;
 import com.cloudflow.exception.TokenRejectedException;
 import com.cloudflow.exception.UnauthorizedException;
 import com.cloudflow.repository.EmailVerificationTokenRepository;
@@ -128,21 +127,16 @@ public class AccountService {
         User user = tenant == null
                 ? null
                 : users.findByTenant_IdAndEmail(tenant.getId(), email(request.email())).orElse(null);
-        String raw = rawToken();
-        String digest = hash(raw);
         if (user == null) {
             return;
         }
+        String raw = rawToken();
+        mail.sendPasswordReset(user.getEmail(), raw);
         PasswordResetToken token = new PasswordResetToken();
         token.setUser(user);
-        token.setTokenHash(digest);
+        token.setTokenHash(hash(raw));
         token.setExpiresAt(clock.instant().plus(mail.resetTtl()));
         resets.save(token);
-        try {
-            mail.sendPasswordReset(user.getEmail(), raw);
-        } catch (MailDeliveryException ex) {
-            // ponytail: same HTTP result as an unknown account. The unused row expires on its own.
-        }
     }
 
     @Transactional

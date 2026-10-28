@@ -29,6 +29,7 @@ import com.cloudflow.security.AuthenticatedUser;
 import com.cloudflow.security.CurrentUserAccessor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -96,18 +97,23 @@ public class OwnedResourceService {
     }
 
     @Transactional(readOnly = true)
+    public PageResponse<ExecutionResponse> executions(UUID deploymentId, PageQuery page) {
+        requireDeployment(deploymentId);
+        AuthenticatedUser caller = currentUser.require();
+        Page<Execution> results = executions.findByDeployment_PublicIdAndDeployment_Tenant_Id(
+                deploymentId,
+                caller.tenantKey(),
+                PageRequest.of(page.page(), page.size(), Sort.by(Sort.Direction.DESC, "createdAt")));
+        return new PageResponse<>(
+                results.stream().map(OwnedResourceService::executionResponse).toList(),
+                page.page(),
+                page.size(),
+                results.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
     public ExecutionResponse execution(UUID publicId) {
-        Execution execution = requireExecution(publicId);
-        UUID workerId = execution.getWorkerNode() == null ? null : execution.getWorkerNode().getPublicId();
-        return new ExecutionResponse(
-                execution.getPublicId(),
-                execution.getDeployment().getPublicId(),
-                execution.getDeploymentVersion().getPublicId(),
-                workerId,
-                execution.getTaskType(),
-                execution.getStatus(),
-                execution.getStartedAt(),
-                execution.getFinishedAt());
+        return executionResponse(requireExecution(publicId));
     }
 
     @Transactional(readOnly = true)
@@ -162,6 +168,20 @@ public class OwnedResourceService {
         return executions
                 .findByPublicIdAndDeployment_Tenant_Id(publicId, caller.tenantKey())
                 .orElseThrow(NotFoundException::new);
+    }
+
+    private static ExecutionResponse executionResponse(Execution execution) {
+        UUID workerId = execution.getWorkerNode() == null ? null : execution.getWorkerNode().getPublicId();
+        return new ExecutionResponse(
+                execution.getPublicId(),
+                execution.getDeployment().getPublicId(),
+                execution.getDeploymentVersion().getPublicId(),
+                workerId,
+                execution.getTaskType(),
+                execution.getStatus(),
+                execution.getAttemptCount(),
+                execution.getStartedAt(),
+                execution.getFinishedAt());
     }
 
     private static DeploymentResponse deploymentResponse(Deployment deployment) {

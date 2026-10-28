@@ -338,6 +338,13 @@ class WorkerProcessingTest extends SecurityTestBase {
         finish(queued, false, "IllegalStateException at com.cloudflow.Secret");
         assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
         assertEquals(ExecutionStatus.FAILED, rows.get(0).getStatus());
+        mockMvc.perform(post("/api/v1/worker/tasks/" + queued + "/result")
+                        .header(AUTHORIZATION, WORKER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"worker-1\",\"succeeded\":true,\"message\":\"again\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(ExecutionStatus.FAILED, rows.get(0).getStatus());
+        assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
         assertTrue(logRows.stream().noneMatch(row -> row.getMessage().contains("Secret")));
         assertEquals(0, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.QUEUED).count());
     }
@@ -376,6 +383,23 @@ class WorkerProcessingTest extends SecurityTestBase {
         worker.setLastSeenAt(Instant.now());
         workerService.sweep();
         assertEquals(ExecutionStatus.QUEUED, hung.getStatus());
+        workerService.sweep();
+        assertEquals(ExecutionStatus.FAILED, execution.getStatus());
+        assertEquals(3, execution.getAttemptCount());
+    }
+
+    @Test
+    void repeatedSuccessDoesNotApplyAgain() throws Exception {
+        Deployment deployment = draft("once");
+        DeploymentVersion version = version(deployment);
+        String queued = queue(deployment, version, TaskType.DEPLOY);
+        register("worker-1");
+        claim();
+        finish(queued, true, "Simulated DEPLOY completed.");
+        finish(queued, true, "Simulated DEPLOY completed again.");
+        assertEquals(ExecutionStatus.SUCCEEDED, rows.get(0).getStatus());
+        assertEquals(DeploymentStatus.ACTIVE, deployment.getStatus());
+        verify(deployments, times(1)).claimFromNew(any(), any(), any(), any());
     }
 
     @Test

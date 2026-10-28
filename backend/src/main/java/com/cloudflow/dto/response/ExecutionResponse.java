@@ -13,5 +13,6 @@ public record ExecutionResponse(
         UUID workerId,
         TaskType taskType,
         ExecutionStatus status,
+        int attemptCount,
         Instant startedAt,
         Instant finishedAt) {}

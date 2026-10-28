@@ -81,9 +81,10 @@ class SimulatedTaskExecutorTest {
         }
 
         @Override
-        public void complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
+        public ReportOutcome complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
             this.succeeded.set(succeeded);
             this.message.set(message);
+            return ReportOutcome.ACCEPTED;
         }
     }
 }

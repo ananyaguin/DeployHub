@@ -20,17 +20,37 @@ export function DeploymentPage({ publicId }) {
   const [image, setImage] = useState('')
   const [pending, setPending] = useState('')
   const [execution, setExecution] = useState(null)
+  const [history, setHistory] = useState(null)
+  const [historyError, setHistoryError] = useState('')
+  const [selectedId, setSelectedId] = useState('')
+  const [logLines, setLogLines] = useState(null)
+  const [logError, setLogError] = useState('')
+  const [logsFor, setLogsFor] = useState('')
 
   useDocumentTitle(deployment ? `${deployment.name} · DeployHub` : 'Deployment · DeployHub')
 
-  const load = useCallback(() => {
+  const load = useCallback((live = () => true) => {
     if (!validId) return Promise.resolve()
-    return Promise.all([
-      api(`/api/v1/deployments/${publicId}`),
-      api(`/api/v1/deployments/${publicId}/versions?page=0&size=100`),
-      api(`/api/v1/deployments/${publicId}/events?page=0&size=20`),
-    ]).then(
+    const deploymentRequest = api(`/api/v1/deployments/${publicId}`)
+    const versionRequest = api(`/api/v1/deployments/${publicId}/versions?page=0&size=100`)
+    const eventRequest = api(`/api/v1/deployments/${publicId}/events?page=0&size=20`)
+    const historyRequest = api(`/api/v1/deployments/${publicId}/executions?page=0&size=20`)
+    historyRequest.then(
+      (page) => {
+        if (!live()) return
+        setHistory(page)
+        setHistoryError('')
+        setSelectedId((current) => current || page.items?.[0]?.publicId || '')
+      },
+      (caught) => {
+        if (!live()) return
+        setHistory(null)
+        setHistoryError(errorText(caught))
+      },
+    )
+    return Promise.all([deploymentRequest, versionRequest, eventRequest]).then(
       ([nextDeployment, nextVersions, nextEvents]) => {
+        if (!live()) return
         setDeployment(nextDeployment)
         setName(nextDeployment.name)
         setVersions(nextVersions)
@@ -39,6 +59,7 @@ export function DeploymentPage({ publicId }) {
         setLoading(false)
       },
       (caught) => {
+        if (!live()) return
         setError(caught.status === 404 ? 'Deployment not found.' : errorText(caught))
         setLoading(false)
       },
@@ -48,27 +69,9 @@ export function DeploymentPage({ publicId }) {
   useEffect(() => {
     if (!validId) return undefined
     let live = true
-    Promise.all([
-      api(`/api/v1/deployments/${publicId}`),
-      api(`/api/v1/deployments/${publicId}/versions?page=0&size=100`),
-      api(`/api/v1/deployments/${publicId}/events?page=0&size=20`),
-    ]).then(
-      ([nextDeployment, nextVersions, nextEvents]) => {
-        if (!live) return
-        setDeployment(nextDeployment)
-        setName(nextDeployment.name)
-        setVersions(nextVersions)
-        setEvents(nextEvents)
-        setLoading(false)
-      },
-      (caught) => {
-        if (!live) return
-        setError(caught.status === 404 ? 'Deployment not found.' : errorText(caught))
-        setLoading(false)
-      },
-    )
+    load(() => live)
     return () => { live = false }
-  }, [publicId, validId])
+  }, [load, validId])
 
   const executionId = execution?.publicId
   const executionStatus = execution?.status
@@ -85,6 +88,27 @@ export function DeploymentPage({ publicId }) {
     }, 3000)
     return () => clearInterval(timer)
   }, [executionId, executionStatus, load])
+
+  useEffect(() => {
+    if (!selectedId) return undefined
+    let live = true
+    const requested = selectedId
+    api(`/api/v1/executions/${requested}/logs?page=0&size=20`).then(
+      (page) => {
+        if (!live) return
+        setLogLines(page)
+        setLogError('')
+        setLogsFor(requested)
+      },
+      (caught) => {
+        if (!live) return
+        setLogLines(null)
+        setLogError(errorText(caught))
+        setLogsFor(requested)
+      },
+    )
+    return () => { live = false }
+  }, [selectedId])
 
   async function rename(event) {
     event.preventDefault()
@@ -168,7 +192,7 @@ export function DeploymentPage({ publicId }) {
           <p className="lede">{deployment.slug} · current version {deployment.currentVersion ?? 'none'}</p>
         </div>
         <StatusBadge value={deployment.status} />
-        <button type="button" className="ghost" onClick={load}>Refresh</button>
+        <button type="button" className="ghost" onClick={() => load()}>Refresh</button>
       </div>
       <Alert>{error}</Alert>
       <Alert tone="ok">{notice}</Alert>
@@ -178,9 +202,65 @@ export function DeploymentPage({ publicId }) {
           <p>
             <StatusBadge value={execution.status} /> {execution.taskType}
           </p>
-          <p className="muted">Events below are the history for this deployment.</p>
+          <p className="muted">Attempt {execution.attemptCount ?? 0}. Started {formatWhen(execution.startedAt) || '—'}. Finished {formatWhen(execution.finishedAt) || '—'}.</p>
         </article>
       ) : null}
+      <div className="panel">
+        <h2>Execution history</h2>
+        {history == null && !historyError ? <p className="muted">Loading execution history…</p> : null}
+        {historyError ? <Alert>{historyError}</Alert> : null}
+        {history && !historyError && !history.items?.length ? <p className="muted">No executions yet.</p> : null}
+        {history?.items?.length ? (
+          <div className="table-wrap">
+            <table className="table">
+              <caption className="sr-only">Executions for {deployment.name}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Status</th>
+                  <th scope="col">Task</th>
+                  <th scope="col">Attempt</th>
+                  <th scope="col">Started</th>
+                  <th scope="col">Finished</th>
+                  <th scope="col">Logs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {history.items.map((row) => (
+                  <tr key={row.publicId}>
+                    <td><StatusBadge value={row.status} /></td>
+                    <td>{row.taskType}</td>
+                    <td>{row.attemptCount}</td>
+                    <td>{formatWhen(row.startedAt) || '—'}</td>
+                    <td>{formatWhen(row.finishedAt) || '—'}</td>
+                    <td>
+                      <button type="button" className="ghost" onClick={() => setSelectedId(row.publicId)}>
+                        {selectedId === row.publicId ? 'Showing' : 'Show'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {selectedId ? (
+          <>
+            {logsFor === selectedId && logError ? <Alert>{logError}</Alert> : null}
+            {logsFor !== selectedId ? <p className="muted">Loading logs…</p> : null}
+            {logsFor === selectedId && logLines && !logError && !logLines.items?.length ? <p className="muted">No log lines yet.</p> : null}
+            {logsFor === selectedId && logLines?.items?.length ? (
+              <ul className="activity">
+                {logLines.items.map((line) => (
+                  <li key={line.sequenceNumber}>
+                    <strong>{line.level}</strong>
+                    <span>{line.message}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </>
+        ) : null}
+      </div>
       <form className="panel form" onSubmit={rename} noValidate>
         <h2>Rename</h2>
         <Field label="Name" name="rename" value={name} onChange={(event) => setName(event.target.value)} required />

@@ -19,6 +19,9 @@ public interface ExecutionRepository extends JpaRepository<Execution, Long> {
 
     Page<Execution> findByDeployment_Tenant_Id(Long tenantId, Pageable pageable);
 
+    Page<Execution> findByDeployment_PublicIdAndDeployment_Tenant_Id(
+            UUID deploymentPublicId, Long tenantId, Pageable pageable);
+
     Optional<Execution> findByPublicIdAndDeployment_Tenant_Id(UUID publicId, Long tenantId);
 
     Optional<Execution> findByPublicId(UUID publicId);

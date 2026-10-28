@@ -209,15 +209,23 @@ public class DeploymentService {
                 || !worker.getId().equals(execution.getWorkerNode().getId())) {
             throw new NotFoundException();
         }
+        ExecutionResponse replay = sameResult(execution, succeeded);
+        if (replay != null) {
+            return replay;
+        }
         if (execution.getStatus() != ExecutionStatus.RUNNING) {
-            return response(execution);
+            throw new ConflictException(STATE);
         }
         Instant now = clock.instant();
         ExecutionStatus target = succeeded ? ExecutionStatus.SUCCEEDED : ExecutionStatus.FAILED;
         int won = executions.finishIfRunning(execution.getId(), worker.getId(), target, now);
         execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
         if (won != 1) {
-            return response(execution);
+            ExecutionResponse raced = sameResult(execution, succeeded);
+            if (raced != null) {
+                return raced;
+            }
+            throw new ConflictException(STATE);
         }
         execution.setStatus(target);
         execution.setFinishedAt(now);
@@ -330,6 +338,17 @@ public class DeploymentService {
         logs.save(row);
     }
 
+    private static ExecutionResponse sameResult(Execution execution, boolean succeeded) {
+        if (execution.getStatus() != ExecutionStatus.SUCCEEDED && execution.getStatus() != ExecutionStatus.FAILED) {
+            return null;
+        }
+        boolean recordedSuccess = execution.getStatus() == ExecutionStatus.SUCCEEDED;
+        if (recordedSuccess != succeeded) {
+            throw new ConflictException(STATE);
+        }
+        return response(execution);
+    }
+
     private static String noted(String detail) {
         return detail.contains("No cloud provider was contacted") ? detail : detail + LOCAL;
     }
@@ -399,6 +418,7 @@ public class DeploymentService {
                 execution.getWorkerNode() == null ? null : execution.getWorkerNode().getPublicId(),
                 execution.getTaskType(),
                 execution.getStatus(),
+                execution.getAttemptCount(),
                 execution.getStartedAt(),
                 execution.getFinishedAt());
     }

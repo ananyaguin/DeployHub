@@ -18,6 +18,12 @@ public class WorkerLoop implements ApplicationRunner, DisposableBean {
     private volatile boolean running = true;
     private volatile boolean registered;
     private Thread thread;
+    /**
+     * A finished task whose result has not been accepted yet. The task is not run again.
+     * If this process stops first, the result is gone and the backend cannot tell whether
+     * the attempt finished. Sweep may then start another attempt, up to the attempt limit.
+     */
+    private PendingReport pending;
 
     public WorkerLoop(WorkerAgentProperties properties, WorkerApi api, DeploymentExecutor executor) {
         this.properties = properties;
@@ -63,15 +69,44 @@ public class WorkerLoop implements ApplicationRunner, DisposableBean {
             registered = true;
         }
         api.heartbeat(properties.name());
+        if (pending != null) {
+            if (settle(pending)) {
+                pending = null;
+            }
+            return;
+        }
         api.claim(properties.name()).ifPresent(this::runTask);
     }
 
-    private void runTask(ClaimedTask task) {
+    void runTask(ClaimedTask task) {
+        TaskResult result;
         try {
-            TaskResult result = executor.execute(task);
-            api.complete(properties.name(), task.publicId(), result.succeeded(), result.message(), result.containerId());
+            result = executor.execute(task);
         } catch (RuntimeException ex) {
-            api.complete(properties.name(), task.publicId(), false, "Task failed.", null);
+            log.warn("Task execution failed");
+            result = TaskResult.failed("Task failed.");
+        }
+        pending = new PendingReport(task, result);
+        if (settle(pending)) {
+            pending = null;
+        }
+    }
+
+    private boolean settle(PendingReport report) {
+        ReportOutcome outcome = report.send(api, properties.name());
+        return switch (outcome) {
+            case ACCEPTED, REJECTED -> true;
+            case RETRY -> {
+                log.warn("Could not report task result");
+                yield false;
+            }
+        };
+    }
+
+    private record PendingReport(ClaimedTask task, TaskResult result) {
+        private ReportOutcome send(WorkerApi api, String workerName) {
+            return api.complete(
+                    workerName, task.publicId(), result.succeeded(), result.message(), result.containerId());
         }
     }
 

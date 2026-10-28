@@ -123,6 +123,8 @@ abstract class SecurityTestBase {
         when(events.findByDeployment_Tenant_IdAndDeployment_PublicId(any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty());
         when(executions.findByPublicIdAndDeployment_Tenant_Id(any(), any())).thenReturn(Optional.empty());
+        when(executions.findByDeployment_PublicIdAndDeployment_Tenant_Id(any(), any(), any(Pageable.class)))
+                .thenReturn(Page.empty());
         when(logs.findByExecution_PublicIdAndExecution_Deployment_Tenant_Id(any(), any(), any(Pageable.class)))
                 .thenReturn(Page.empty());
         when(preferences.findByUser_PublicIdAndUser_Tenant_Id(any(), any())).thenReturn(Optional.empty());

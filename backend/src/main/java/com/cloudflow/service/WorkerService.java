@@ -182,7 +182,8 @@ public class WorkerService {
             execution = executions.findById(execution.getId()).orElseThrow(NotFoundException::new);
             execution.setStatus(ExecutionStatus.FAILED);
             execution.setFinishedAt(now);
-            String detail = "Stopped after " + execution.getAttemptCount() + " attempts.";
+            String detail = "Stopped after " + execution.getAttemptCount()
+                    + " attempts. The last attempt's result was not recorded.";
             writeLog(execution, execution.getAttemptCount() * 2, LogLevel.ERROR, detail);
             event(execution, "INTERRUPTED", detail + LOCAL);
             return;
@@ -196,7 +197,8 @@ public class WorkerService {
         execution.setWorkerNode(null);
         execution.setStartedAt(null);
         String detail = "Requeued after interruption. Attempt " + execution.getAttemptCount()
-                + " of " + properties.maxAttempts() + ".";
+                + " of " + properties.maxAttempts()
+                + ". The previous attempt's result was not recorded.";
         writeLog(execution, execution.getAttemptCount() * 2, LogLevel.WARN, detail);
         event(execution, "INTERRUPTED", detail + LOCAL);
     }

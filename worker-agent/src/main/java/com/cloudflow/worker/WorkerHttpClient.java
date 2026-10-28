@@ -59,12 +59,29 @@ public final class WorkerHttpClient implements WorkerApi {
     }
 
     @Override
-    public void complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
+    public ReportOutcome complete(String name, UUID executionId, boolean succeeded, String message, String containerId) {
         ObjectNode node = body(name, succeeded, message);
         if (containerId != null) {
             node.put("containerId", containerId);
         }
-        post("/api/v1/worker/tasks/" + executionId + "/result", node, false);
+        try {
+            int status = send("/api/v1/worker/tasks/" + executionId + "/result", node).statusCode();
+            if (status >= 200 && status < 300) {
+                return ReportOutcome.ACCEPTED;
+            }
+            if (status == 404 || status == 409) {
+                log.warn("Worker result was not accepted");
+                return ReportOutcome.REJECTED;
+            }
+            if (status == 401) {
+                log.warn("Worker authentication was rejected");
+            } else {
+                log.warn("Worker request failed with status {}", status);
+            }
+            return ReportOutcome.RETRY;
+        } catch (IllegalStateException ex) {
+            return ReportOutcome.RETRY;
+        }
     }
 
     private ObjectNode body(String name, Boolean succeeded, String message) {
@@ -78,6 +95,23 @@ public final class WorkerHttpClient implements WorkerApi {
     }
 
     private HttpResponse<String> post(String path, ObjectNode body, boolean allowEmpty) {
+        HttpResponse<String> response = send(path, body);
+        int status = response.statusCode();
+        if (status == 401) {
+            log.warn("Worker authentication was rejected");
+            throw new IllegalStateException("Worker request failed");
+        }
+        if (allowEmpty && status == 204) {
+            return response;
+        }
+        if (status < 200 || status >= 300) {
+            log.warn("Worker request failed with status {}", status);
+            throw new IllegalStateException("Worker request failed");
+        }
+        return response;
+    }
+
+    private HttpResponse<String> send(String path, ObjectNode body) {
         HttpRequest request = HttpRequest.newBuilder(URI.create(backendUrl + path))
                 .timeout(Duration.ofSeconds(5))
                 .header("Authorization", "Worker " + token)
@@ -85,20 +119,7 @@ public final class WorkerHttpClient implements WorkerApi {
                 .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                 .build();
         try {
-            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            int status = response.statusCode();
-            if (status == 401) {
-                log.warn("Worker authentication was rejected");
-                throw new IllegalStateException("Worker request failed");
-            }
-            if (allowEmpty && status == 204) {
-                return response;
-            }
-            if (status < 200 || status >= 300) {
-                log.warn("Worker request failed with status {}", status);
-                throw new IllegalStateException("Worker request failed");
-            }
-            return response;
+            return http.send(request, HttpResponse.BodyHandlers.ofString());
         } catch (IOException ex) {
             log.warn("Worker request failed");
             throw new IllegalStateException("Worker request failed");

@@ -1,7 +1,9 @@
 package com.cloudflow.security;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import com.cloudflow.entity.DeliveryStatus;
 import com.cloudflow.entity.Deployment;
@@ -36,6 +38,21 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 class TenantIsolationTest extends SecurityTestBase {
+
+    @Test
+    void executionHistoryRejectsAnonymousAndMissingIds() throws Exception {
+        mockMvc.perform(get("/api/v1/deployments/" + UUID.randomUUID() + "/executions?page=0&size=20"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("Authentication required"));
+
+        User owner = user(tenant(1L, "acme"), "ada@example.com", UserRole.OWNER, true);
+        asUser(owner, get("/api/v1/executions/" + UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        asUser(owner, get("/api/v1/deployments/" + UUID.randomUUID() + "/executions?page=0&size=20"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+    }
 
     @Test
     void memberCannotCreateUsers() throws Exception {
@@ -125,8 +142,23 @@ class TenantIsolationTest extends SecurityTestBase {
         expectFound(
                 stranger, get("/api/v1/deployments/" + deployment.getPublicId() + "/events?page=0&size=20"), "$.total", 0);
 
+        execution.setAttemptCount(2);
+        execution.setStatus(ExecutionStatus.FAILED);
+        execution.setStartedAt(Instant.parse("2026-01-02T03:04:05Z"));
+        execution.setFinishedAt(Instant.parse("2026-01-02T03:05:05Z"));
+        when(executions.findByDeployment_PublicIdAndDeployment_Tenant_Id(
+                        eq(deployment.getPublicId()), eq(2L), any()))
+                .thenReturn(new PageImpl<>(List.of(execution)));
+
         expectMissing(owner, get("/api/v1/executions/" + execution.getPublicId()));
         expectFound(stranger, get("/api/v1/executions/" + execution.getPublicId()), "$.taskType", "DEPLOY");
+        expectFound(stranger, get("/api/v1/executions/" + execution.getPublicId()), "$.attemptCount", 2);
+
+        String history = "/api/v1/deployments/" + deployment.getPublicId() + "/executions?page=0&size=20";
+        expectMissing(owner, get(history));
+        expectFound(stranger, get(history), "$.total", 1);
+        expectFound(stranger, get(history), "$.items[0].status", "FAILED");
+        expectFound(stranger, get(history), "$.items[0].attemptCount", 2);
 
         expectMissing(owner, get("/api/v1/executions/" + execution.getPublicId() + "/logs?page=0&size=20"));
         expectFound(stranger, get("/api/v1/executions/" + execution.getPublicId() + "/logs?page=0&size=20"), "$.total", 0);

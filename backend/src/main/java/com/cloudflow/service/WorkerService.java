@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 import com.cloudflow.configuration.WorkerProperties;
 import com.cloudflow.dto.response.ExecutionResponse;
@@ -35,6 +36,10 @@ public class WorkerService {
 
     private static final String STATE = "Deployment state cannot change that way";
     private static final String LOCAL = " No cloud provider was contacted.";
+    private static final int DECLARED_CPU = 1000;
+    private static final int DECLARED_MEMORY = 512;
+
+    private final ConcurrentHashMap<Long, Object> claimLocks = new ConcurrentHashMap<>();
 
     private final WorkerProperties properties;
     private final WorkerNodeRepository workers;
@@ -62,7 +67,7 @@ public class WorkerService {
     }
 
     @Transactional
-    public WorkerNodeResponse register(String name) {
+    public WorkerNodeResponse register(String name, Integer cpuMillis, Integer memoryMb) {
         sweep();
         Instant now = clock.instant();
         WorkerNode node = workers.findByName(name).orElse(null);
@@ -78,6 +83,9 @@ public class WorkerService {
                 node = workers.findByName(name).orElseThrow(NotFoundException::new);
             }
         }
+        node.setCpuMillis(cpuMillis == null ? DECLARED_CPU : cpuMillis);
+        node.setMemoryMb(memoryMb == null ? DECLARED_MEMORY : memoryMb);
+        workers.save(node);
         workers.touch(node.getId(), now);
         node.setStatus(WorkerStatus.ONLINE);
         node.setLastSeenAt(now);
@@ -102,20 +110,36 @@ public class WorkerService {
         if (worker.getStatus() != WorkerStatus.ONLINE) {
             throw new ConflictException(STATE);
         }
-        Instant now = clock.instant();
-        for (int attempt = 0; attempt < 5; attempt++) {
-            Execution next = executions
-                    .findFirstByStatusOrderByCreatedAtAsc(ExecutionStatus.QUEUED)
-                    .orElse(null);
-            if (next == null) {
-                return Optional.empty();
-            }
-            int won = executions.claimQueued(next.getId(), worker, now);
-            if (won != 1) {
+        // ponytail: one lock per worker in this process. findByIdForUpdate is the lock across API processes.
+        Object lock = claimLocks.computeIfAbsent(worker.getId(), id -> new Object());
+        synchronized (lock) {
+            workers.findByIdForUpdate(worker.getId()).orElseThrow(NotFoundException::new);
+            return claimNext(worker, clock.instant());
+        }
+    }
+
+    private Optional<WorkerTaskResponse> claimNext(WorkerNode worker, Instant now) {
+        List<Execution> queued = executions.findByStatusOrderByCreatedAtAsc(ExecutionStatus.QUEUED);
+        if (queued == null || queued.isEmpty()) {
+            return Optional.empty();
+        }
+        int usedCpu = executions.sumRunningCpu(worker.getId());
+        int usedMemory = executions.sumRunningMemory(worker.getId());
+        for (Execution candidate : queued) {
+            if (candidate.getCpuMillis() > worker.getCpuMillis() || candidate.getMemoryMb() > worker.getMemoryMb()) {
                 continue;
             }
-            Execution claimed = executions.findById(next.getId()).orElseThrow(NotFoundException::new);
+            if (usedCpu + candidate.getCpuMillis() > worker.getCpuMillis()
+                    || usedMemory + candidate.getMemoryMb() > worker.getMemoryMb()) {
+                return Optional.empty();
+            }
+            int won = executions.claimQueued(candidate.getId(), worker, now);
+            if (won != 1) {
+                return Optional.empty();
+            }
+            Execution claimed = executions.findById(candidate.getId()).orElseThrow(NotFoundException::new);
             writeLog(claimed, claimed.getAttemptCount() * 2 - 1, LogLevel.INFO, "Claimed by " + worker.getName() + ".");
+            event(claimed, "STARTED", "Execution started on " + worker.getName() + ". Declared capacity is not measured.");
             DeploymentVersion version = claimed.getDeploymentVersion();
             Map<String, String> environment = deployments.environmentOf(version);
             return Optional.of(new WorkerTaskResponse(
@@ -220,12 +244,17 @@ public class WorkerService {
         DeploymentEvent event = new DeploymentEvent();
         event.setDeployment(execution.getDeployment());
         event.setDeploymentVersion(execution.getDeploymentVersion());
+        event.setExecution(execution);
         event.setEventType(type);
         event.setMessage(message);
+        String name = execution.getWorkerNode() == null ? null : execution.getWorkerNode().getName();
+        event.setActorLabel(name == null ? "scheduler" : "worker:" + name);
         events.save(event);
     }
 
     private static WorkerNodeResponse response(WorkerNode node) {
-        return new WorkerNodeResponse(node.getPublicId(), node.getName(), node.getStatus(), node.getLastSeenAt());
+        return new WorkerNodeResponse(
+                node.getPublicId(), node.getName(), node.getStatus(), node.getLastSeenAt(),
+                node.getCpuMillis(), node.getMemoryMb());
     }
 }

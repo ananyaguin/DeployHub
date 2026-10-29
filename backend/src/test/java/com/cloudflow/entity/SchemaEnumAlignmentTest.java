@@ -13,7 +13,8 @@ class SchemaEnumAlignmentTest {
     void enumNamesMatchFlywayChecks() throws IOException {
         String schema = read("db/migration/V1__initial_schema.sql")
                 + read("db/migration/V2__public_ids_and_task_fields.sql")
-                + read("db/migration/V7__deployment_health.sql");
+                + read("db/migration/V7__deployment_health.sql")
+                + read("db/migration/V8__declared_capacity_and_notices.sql");
         assertCheck(schema, "chk_deployments_status", DeploymentStatus.values());
         assertCheck(schema, "chk_deployments_health_status", HealthStatus.values());
         assertCheck(schema, "chk_executions_status", ExecutionStatus.values());

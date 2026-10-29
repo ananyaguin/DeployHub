@@ -34,7 +34,23 @@ public interface ExecutionRepository extends JpaRepository<Execution, Long> {
 
     Optional<Execution> findFirstByStatusOrderByCreatedAtAsc(ExecutionStatus status);
 
+    List<Execution> findByStatusOrderByCreatedAtAsc(ExecutionStatus status);
+
     List<Execution> findByStatus(ExecutionStatus status);
+
+    @Query("""
+            select coalesce(sum(e.cpuMillis), 0) from Execution e
+            where e.workerNode.id = :workerId
+              and e.status = com.cloudflow.entity.ExecutionStatus.RUNNING
+            """)
+    int sumRunningCpu(@Param("workerId") Long workerId);
+
+    @Query("""
+            select coalesce(sum(e.memoryMb), 0) from Execution e
+            where e.workerNode.id = :workerId
+              and e.status = com.cloudflow.entity.ExecutionStatus.RUNNING
+            """)
+    int sumRunningMemory(@Param("workerId") Long workerId);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

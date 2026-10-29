@@ -375,6 +375,7 @@ export function DeploymentPage({ publicId }) {
             {events.items.map((event) => (
               <li key={`${event.createdAt}-${event.eventType}-${event.message}`}>
                 <strong>{event.eventType}</strong>
+                {event.actor ? <span>{event.actor}</span> : null}
                 <span>{event.message}</span>
                 <time dateTime={event.createdAt}>{formatWhen(event.createdAt)}</time>
               </li>

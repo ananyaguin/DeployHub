@@ -6,4 +6,4 @@ import com.cloudflow.entity.DeliveryStatus;
 import com.cloudflow.entity.NotificationChannel;
 
 public record NotificationDeliveryResponse(
-        NotificationChannel channel, DeliveryStatus status, Instant sentAt) {}
+        NotificationChannel channel, DeliveryStatus status, Instant sentAt, String summary) {}

@@ -7,7 +7,9 @@ import { followLink } from '../routes/navigate'
 
 export function DashboardPage() {
   useDocumentTitle('Dashboard · DeployHub')
-  const [state, setState] = useState({ status: 'loading', deployments: [], total: 0, complete: true, events: [], error: '' })
+  const [state, setState] = useState({
+    status: 'loading', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], error: '',
+  })
 
   useEffect(() => {
     let live = true
@@ -25,11 +27,20 @@ export function DashboardPage() {
         return (page.items || []).map((event) => ({ ...event, deployment }))
       }))
       const events = eventPages.flat().sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))).slice(0, 8)
-      return { deployments: items, total: Number(first.total), complete: items.length >= Number(first.total), events }
+      const audit = await api('/api/v1/audit?page=0&size=8').catch(() => null)
+      const notices = await api('/api/v1/notification-deliveries?page=0&size=8').catch(() => null)
+      return {
+        deployments: items,
+        total: Number(first.total),
+        complete: items.length >= Number(first.total),
+        events,
+        audit: audit?.items || [],
+        notices: notices?.items || [],
+      }
     }
     load().then(
       (data) => { if (live) setState({ status: 'ready', error: '', ...data }) },
-      (error) => { if (live) setState({ status: 'error', deployments: [], total: 0, complete: true, events: [], error: errorText(error) }) },
+      (error) => { if (live) setState({ status: 'error', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], error: errorText(error) }) },
     )
     return () => { live = false }
   }, [])
@@ -65,6 +76,33 @@ export function DashboardPage() {
             <article className="stat"><span>Archived</span><strong>{counts.ARCHIVED}</strong></article>
           </div>
           {state.complete ? null : <p className="muted">Status counts cover the first {state.deployments.length} of {state.total} deployments.</p>}
+          <h2>Notices</h2>
+          <p className="muted">In-app notices for failures, unhealthy simulated checks, and rollback results. Repeated reports do not add another notice.</p>
+          {state.notices.length === 0 ? <p className="muted">No notices yet.</p> : (
+            <ul className="activity">
+              {state.notices.map((notice) => (
+                <li key={`${notice.sentAt}-${notice.summary}`}>
+                  <StatusBadge value={notice.channel} />
+                  <span>{notice.summary || notice.status}</span>
+                  <time dateTime={notice.sentAt}>{formatWhen(notice.sentAt)}</time>
+                </li>
+              ))}
+            </ul>
+          )}
+          <h2>Audit</h2>
+          <p className="muted">Tenant audit history. Capacity figures are declared, not measured on the host.</p>
+          {state.audit.length === 0 ? <p className="muted">No audit events yet.</p> : (
+            <ul className="activity">
+              {state.audit.map((event) => (
+                <li key={`${event.deploymentId}-${event.createdAt}-${event.eventType}-${event.message}`}>
+                  <strong>{event.eventType}</strong>
+                  <span>{event.actor || 'system'}</span>
+                  <span className="muted">{event.message}</span>
+                  <time dateTime={event.createdAt}>{formatWhen(event.createdAt)}</time>
+                </li>
+              ))}
+            </ul>
+          )}
           <h2>Recent activity</h2>
           <p className="muted">From the newest deployments on this page.</p>
           {state.events.length === 0 ? <p className="muted">No events yet.</p> : (

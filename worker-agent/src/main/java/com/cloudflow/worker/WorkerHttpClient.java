@@ -22,6 +22,8 @@ public final class WorkerHttpClient implements WorkerApi {
     private final ObjectMapper json;
     private final String backendUrl;
     private final String token;
+    private final int cpuMillis;
+    private final int memoryMb;
 
     public WorkerHttpClient(WorkerAgentProperties properties) {
         this(HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build(), new ObjectMapper(), properties);
@@ -32,11 +34,16 @@ public final class WorkerHttpClient implements WorkerApi {
         this.json = json;
         this.backendUrl = properties.backendUrl();
         this.token = properties.token();
+        this.cpuMillis = properties.cpuMillis();
+        this.memoryMb = properties.memoryMb();
     }
 
     @Override
     public void register(String name) {
-        post("/api/v1/worker/nodes", body(name, null, null), false);
+        ObjectNode node = body(name, null, null);
+        node.put("cpuMillis", cpuMillis);
+        node.put("memoryMb", memoryMb);
+        post("/api/v1/worker/nodes", node, false);
     }
 
     @Override

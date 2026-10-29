@@ -5,9 +5,11 @@ import com.cloudflow.entity.WorkerStatus;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +19,10 @@ public interface WorkerNodeRepository extends JpaRepository<WorkerNode, Long> {
     Optional<WorkerNode> findByPublicId(UUID publicId);
 
     Optional<WorkerNode> findByName(String name);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select w from WorkerNode w where w.id = :id")
+    Optional<WorkerNode> findByIdForUpdate(@Param("id") Long id);
 
     Page<WorkerNode> findByStatus(WorkerStatus status, Pageable pageable);
 

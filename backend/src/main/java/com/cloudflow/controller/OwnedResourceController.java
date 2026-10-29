@@ -47,6 +47,11 @@ public class OwnedResourceController {
         return resources.events(deploymentId, page);
     }
 
+    @GetMapping("/api/v1/audit")
+    public PageResponse<DeploymentEventResponse> audit(@Valid PageQuery page) {
+        return resources.audit(page);
+    }
+
     @GetMapping("/api/v1/deployments/{deploymentId}/executions")
     public PageResponse<ExecutionResponse> executions(@PathVariable UUID deploymentId, @Valid PageQuery page) {
         return resources.executions(deploymentId, page);

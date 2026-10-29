@@ -1,5 +1,6 @@
 package com.cloudflow.entity;
 
 public enum NotificationChannel {
-    EMAIL
+    EMAIL,
+    IN_APP
 }

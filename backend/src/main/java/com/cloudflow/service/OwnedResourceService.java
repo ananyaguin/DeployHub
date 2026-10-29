@@ -118,8 +118,7 @@ public class OwnedResourceService {
                 caller.tenantKey(), deploymentId, PageRequest.of(page.page(), page.size()));
         return new PageResponse<>(
                 results.stream()
-                        .map(event -> new DeploymentEventResponse(
-                                event.getEventType(), event.getMessage(), event.getCreatedAt()))
+                        .map(OwnedResourceService::eventResponse)
                         .toList(),
                 page.page(),
                 page.size(),
@@ -136,6 +135,19 @@ public class OwnedResourceService {
                 PageRequest.of(page.page(), page.size(), Sort.by(Sort.Direction.DESC, "createdAt")));
         return new PageResponse<>(
                 results.stream().map(OwnedResourceService::executionResponse).toList(),
+                page.page(),
+                page.size(),
+                results.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<DeploymentEventResponse> audit(PageQuery page) {
+        AuthenticatedUser caller = currentUser.require();
+        Page<DeploymentEvent> results = events.findByDeployment_Tenant_Id(
+                caller.tenantKey(),
+                PageRequest.of(page.page(), page.size(), Sort.by(Sort.Direction.DESC, "createdAt")));
+        return new PageResponse<>(
+                results.stream().map(OwnedResourceService::eventResponse).toList(),
                 page.page(),
                 page.size(),
                 results.getTotalElements());
@@ -179,7 +191,7 @@ public class OwnedResourceService {
         return new PageResponse<>(
                 results.stream()
                         .map(delivery -> new NotificationDeliveryResponse(
-                                delivery.getChannel(), delivery.getStatus(), delivery.getSentAt()))
+                                delivery.getChannel(), delivery.getStatus(), delivery.getSentAt(), delivery.getSummary()))
                         .toList(),
                 page.page(),
                 page.size(),
@@ -198,6 +210,16 @@ public class OwnedResourceService {
         return executions
                 .findByPublicIdAndDeployment_Tenant_Id(publicId, caller.tenantKey())
                 .orElseThrow(NotFoundException::new);
+    }
+
+    private static DeploymentEventResponse eventResponse(DeploymentEvent event) {
+        return new DeploymentEventResponse(
+                event.getEventType(),
+                event.getMessage(),
+                event.getCreatedAt(),
+                event.getActorLabel(),
+                event.getDeployment().getPublicId(),
+                event.executionPublicId());
     }
 
     private static ExecutionResponse executionResponse(Execution execution) {

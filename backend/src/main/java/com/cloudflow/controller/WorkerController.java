@@ -26,7 +26,7 @@ public class WorkerController {
 
     @PostMapping("/api/v1/worker/nodes")
     public WorkerNodeResponse register(@Valid @RequestBody WorkerNameRequest request) {
-        return workers.register(request.name());
+        return workers.register(request.name(), request.cpuMillis(), request.memoryMb());
     }
 
     @PostMapping("/api/v1/worker/heartbeat")

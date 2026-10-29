@@ -43,6 +43,12 @@ public class Execution extends TimestampedPublicEntity {
     @Column(name = "attempt_count", nullable = false)
     private int attemptCount;
 
+    @Column(name = "cpu_millis", nullable = false)
+    private int cpuMillis = 100;
+
+    @Column(name = "memory_mb", nullable = false)
+    private int memoryMb = 64;
+
     public Deployment getDeployment() {
         return deployment;
     }
@@ -105,5 +111,21 @@ public class Execution extends TimestampedPublicEntity {
 
     public void setAttemptCount(int attemptCount) {
         this.attemptCount = attemptCount;
+    }
+
+    public int getCpuMillis() {
+        return cpuMillis;
+    }
+
+    public void setCpuMillis(int cpuMillis) {
+        this.cpuMillis = cpuMillis;
+    }
+
+    public int getMemoryMb() {
+        return memoryMb;
+    }
+
+    public void setMemoryMb(int memoryMb) {
+        this.memoryMb = memoryMb;
     }
 }

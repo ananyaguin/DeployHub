@@ -403,7 +403,7 @@ class DeploymentLifecycleTest extends SecurityTestBase {
             }
         });
         CreateExecutionRequest request = new CreateExecutionRequest(
-                deployment.getPublicId().toString(), version.getPublicId().toString(), TaskType.DEPLOY);
+                deployment.getPublicId().toString(), version.getPublicId().toString(), TaskType.DEPLOY, null, null);
         ExecutorService pool = Executors.newFixedThreadPool(2);
         CountDownLatch start = new CountDownLatch(1);
         Future<Boolean> first = pool.submit(() -> attempt(start, request));

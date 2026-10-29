@@ -29,7 +29,7 @@ An `OWNER` or `ADMIN` can add a user with `POST /api/v1/users`. That user joins 
 
 ## Tenant isolation
 
-Deployment, version, event, execution, log, and notification reads and writes use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. A tenant id in a JSON body is ignored. Notification reads also use the caller's user id.
+Deployment, version, event, audit, execution, log, health, and notification reads and writes use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. A tenant id in a JSON body is ignored. Notification reads also use the caller's user id.
 
 Deployment status stays `DRAFT`, `ACTIVE`, or `ARCHIVED`. `POST /api/v1/executions` only queues a task. The deployment status changes when a worker reports that the task finished, and only if the status and current version still match. A second open task for the same deployment is rejected. Two workers cannot both claim one queued row: the update matches `QUEUED`.
 
@@ -49,7 +49,7 @@ SMTP settings are `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, an
 
 `/api/v1/worker/**` is a separate filter chain. It accepts `Authorization: Worker <WORKER_TOKEN>` and rejects user bearer tokens. A worker token is rejected on user routes. `WORKER_TOKEN` is its own environment variable. An empty value denies every worker request. The token is not returned by the API and is not written to logs.
 
-A worker registers with `POST /api/v1/worker/nodes` and refreshes `last_seen_at` with `POST /api/v1/worker/heartbeat`. The body is the worker name. There is no per-worker secret. `POST /api/v1/worker/tasks/claim` takes the oldest queued execution. `POST /api/v1/worker/tasks/{id}/result` is accepted only from the worker that claimed it. Another worker gets the same 404 as a missing id. There is no capacity column on `worker_nodes`.
+A worker registers with `POST /api/v1/worker/nodes` and refreshes `last_seen_at` with `POST /api/v1/worker/heartbeat`. The body is the worker name, plus optional declared `cpuMillis` and `memoryMb`. There is no per-worker secret. `POST /api/v1/worker/tasks/claim` takes the oldest queued execution that fits the worker's remaining declared capacity. An offline worker is rejected. `POST /api/v1/worker/tasks/{id}/result` is accepted only from the worker that claimed it. Another worker gets the same 404 as a missing id. Declared capacity is not a reading from the host.
 
 `WORKER_HEARTBEAT_TIMEOUT` (default 30s) marks a quiet worker `OFFLINE`. `WORKER_RUNNING_TIMEOUT` (default 2m) treats a `RUNNING` row as interrupted even if the worker still looks online. `WORKER_MAX_ATTEMPTS` (default 3) is the claim limit. Below the limit the row returns to `QUEUED`. At the limit it becomes `FAILED`. `SUCCEEDED`, `FAILED`, and `CANCELLED` are not claimed again. The sweep also runs on heartbeat and claim. Its own timer is `WORKER_SWEEP_INTERVAL`.
 

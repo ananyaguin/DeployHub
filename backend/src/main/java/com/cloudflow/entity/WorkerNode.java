@@ -21,6 +21,12 @@ public class WorkerNode extends TimestampedPublicEntity {
     @Column(name = "last_seen_at")
     private Instant lastSeenAt;
 
+    @Column(name = "cpu_millis", nullable = false)
+    private int cpuMillis = 1000;
+
+    @Column(name = "memory_mb", nullable = false)
+    private int memoryMb = 512;
+
     public String getName() {
         return name;
     }
@@ -43,5 +49,21 @@ public class WorkerNode extends TimestampedPublicEntity {
 
     public void setLastSeenAt(Instant lastSeenAt) {
         this.lastSeenAt = lastSeenAt;
+    }
+
+    public int getCpuMillis() {
+        return cpuMillis;
+    }
+
+    public void setCpuMillis(int cpuMillis) {
+        this.cpuMillis = cpuMillis;
+    }
+
+    public int getMemoryMb() {
+        return memoryMb;
+    }
+
+    public void setMemoryMb(int memoryMb) {
+        this.memoryMb = memoryMb;
     }
 }

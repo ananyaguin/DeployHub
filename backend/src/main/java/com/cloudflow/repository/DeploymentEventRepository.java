@@ -10,4 +10,6 @@ public interface DeploymentEventRepository extends JpaRepository<DeploymentEvent
 
     Page<DeploymentEvent> findByDeployment_Tenant_IdAndDeployment_PublicId(
             Long tenantId, UUID deploymentPublicId, Pageable pageable);
+
+    Page<DeploymentEvent> findByDeployment_Tenant_Id(Long tenantId, Pageable pageable);
 }

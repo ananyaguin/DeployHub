@@ -33,6 +33,9 @@ public class NotificationDelivery extends IdentifiedEntity {
     @Column(name = "sent_at")
     private Instant sentAt;
 
+    @Column(length = 500)
+    private String summary;
+
     public User getUser() {
         return user;
     }
@@ -71,5 +74,13 @@ public class NotificationDelivery extends IdentifiedEntity {
 
     public void setSentAt(Instant sentAt) {
         this.sentAt = sentAt;
+    }
+
+    public String getSummary() {
+        return summary;
+    }
+
+    public void setSummary(String summary) {
+        this.summary = summary;
     }
 }

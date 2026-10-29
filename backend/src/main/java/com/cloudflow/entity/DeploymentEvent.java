@@ -1,5 +1,7 @@
 package com.cloudflow.entity;
 
+import java.util.UUID;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -24,6 +26,13 @@ public class DeploymentEvent extends IdentifiedEntity {
 
     @Column(nullable = false, updatable = false, length = 1000)
     private String message;
+
+    @Column(name = "actor_label", updatable = false, length = 160)
+    private String actorLabel;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "execution_id", updatable = false)
+    private Execution execution;
 
     public Deployment getDeployment() {
         return deployment;
@@ -55,5 +64,25 @@ public class DeploymentEvent extends IdentifiedEntity {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public String getActorLabel() {
+        return actorLabel;
+    }
+
+    public void setActorLabel(String actorLabel) {
+        this.actorLabel = actorLabel;
+    }
+
+    public Execution getExecution() {
+        return execution;
+    }
+
+    public void setExecution(Execution execution) {
+        this.execution = execution;
+    }
+
+    public UUID executionPublicId() {
+        return execution == null ? null : execution.getPublicId();
     }
 }

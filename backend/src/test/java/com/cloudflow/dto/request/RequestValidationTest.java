@@ -38,7 +38,7 @@ class RequestValidationTest {
                 "name",
                 "slug");
         assertFields(
-                new CreateExecutionRequest("not-a-uuid", "also-bad", null),
+                new CreateExecutionRequest("not-a-uuid", "also-bad", null, null, null),
                 "deploymentId",
                 "versionId",
                 "taskType");
@@ -46,7 +46,9 @@ class RequestValidationTest {
         assertMessagesOmit(
                 new CreateUserRequest("not-an-email", SHORT_PASSWORD, "Ada", UserRole.MEMBER), SHORT_PASSWORD);
         assertMessagesOmit(new PasswordResetConfirmRequest(TOKEN, "12345678"), TOKEN);
-        assertMessagesOmit(new CreateExecutionRequest("not-a-uuid", id(), TaskType.DEPLOY), "not-a-uuid");
+        assertMessagesOmit(new CreateExecutionRequest("not-a-uuid", id(), TaskType.DEPLOY, null, null), "not-a-uuid");
+        assertFields(new CreateExecutionRequest(id(), id(), TaskType.DEPLOY, 0, 0), "cpuMillis", "memoryMb");
+        assertFields(new WorkerNameRequest("worker-1", 16_001, 65_537), "cpuMillis", "memoryMb");
     }
 
     @Test
@@ -68,7 +70,9 @@ class RequestValidationTest {
         assertTrue(validator
                 .validate(new UpdateDeploymentRequest("API", DeploymentStatus.ACTIVE))
                 .isEmpty());
-        assertTrue(validator.validate(new CreateExecutionRequest(id(), id(), TaskType.ROLLBACK)).isEmpty());
+        assertTrue(validator.validate(new CreateExecutionRequest(id(), id(), TaskType.ROLLBACK, null, null)).isEmpty());
+        assertTrue(validator.validate(new CreateExecutionRequest(id(), id(), TaskType.DEPLOY, 100, 64)).isEmpty());
+        assertTrue(validator.validate(new WorkerNameRequest("worker-1", null, null)).isEmpty());
         assertTrue(validator.validate(new UpdateNotificationPreferenceRequest(false)).isEmpty());
         assertTrue(validator.validate(new PageQuery(0, 20)).isEmpty());
         assertTrue(validator

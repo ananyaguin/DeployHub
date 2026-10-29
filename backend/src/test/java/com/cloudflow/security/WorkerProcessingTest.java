@@ -34,6 +34,7 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -80,6 +81,9 @@ class WorkerProcessingTest extends SecurityTestBase {
         nodes.clear();
         rows.clear();
         logRows.clear();
+        eventRows.clear();
+        noticeRows.clear();
+        deploymentById.clear();
         versionById.clear();
         versionCount = 0;
         stored = null;
@@ -89,25 +93,23 @@ class WorkerProcessingTest extends SecurityTestBase {
         when(deployments.save(any(Deployment.class))).thenAnswer(invocation -> {
             Deployment deployment = invocation.getArgument(0);
             if (deployment.getId() == null) {
-                ReflectionTestUtils.setField(deployment, "id", 10L);
+                ReflectionTestUtils.setField(deployment, "id", 10L + deploymentById.size());
             }
             stored = deployment;
+            deploymentById.put(deployment.getPublicId(), deployment);
             return deployment;
         });
         when(deployments.findByPublicIdAndTenant_Id(any(), any())).thenAnswer(invocation -> {
-            if (stored == null || !invocation.getArgument(0).equals(stored.getPublicId())
-                    || !invocation.getArgument(1).equals(stored.getTenant().getId())) {
+            Deployment deployment = deploymentById.get(invocation.getArgument(0));
+            if (deployment == null || !invocation.getArgument(1).equals(deployment.getTenant().getId())) {
                 return Optional.empty();
             }
-            return Optional.of(stored);
+            return Optional.of(deployment);
         });
         when(deployments.findByTenant_IdAndSlug(any(), any())).thenReturn(Optional.empty());
-        when(deployments.findByIdForUpdate(any())).thenAnswer(invocation -> {
-            if (stored == null || !invocation.getArgument(0).equals(stored.getId())) {
-                return Optional.empty();
-            }
-            return Optional.of(stored);
-        });
+        when(deployments.findByIdForUpdate(any())).thenAnswer(invocation -> deploymentById.values().stream()
+                .filter(deployment -> invocation.getArgument(0).equals(deployment.getId()))
+                .findFirst());
         when(deployments.claimFromNew(any(), any(), any(), any())).thenAnswer(invocation -> claimDeployment(invocation.getArguments(), true));
         when(deployments.claimFromVersion(any(), any(), any(), any(), any()))
                 .thenAnswer(invocation -> claimDeployment(invocation.getArguments(), false));
@@ -142,6 +144,9 @@ class WorkerProcessingTest extends SecurityTestBase {
             Execution execution = invocation.getArgument(0);
             if (execution.getId() == null) {
                 ReflectionTestUtils.setField(execution, "id", executionIds.incrementAndGet());
+                if (execution.getCreatedAt() == null) {
+                    ReflectionTestUtils.setField(execution, "createdAt", Instant.EPOCH.plusMillis(rows.size()));
+                }
                 rows.add(execution);
             }
             return execution;
@@ -167,6 +172,27 @@ class WorkerProcessingTest extends SecurityTestBase {
             synchronized (rows) {
                 return rows.stream().anyMatch(row -> id.equals(row.getDeployment().getId())
                         && statuses.contains(row.getStatus()));
+            }
+        });
+        when(executions.findByStatusOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
+            ExecutionStatus status = invocation.getArgument(0);
+            synchronized (rows) {
+                return rows.stream()
+                        .filter(row -> row.getStatus() == status)
+                        .sorted(Comparator.comparing(Execution::getCreatedAt, Comparator.nullsLast(Comparator.naturalOrder())))
+                        .toList();
+            }
+        });
+        when(executions.sumRunningCpu(any())).thenAnswer(invocation -> runningSum(invocation.getArgument(0), true));
+        when(executions.sumRunningMemory(any())).thenAnswer(invocation -> runningSum(invocation.getArgument(0), false));
+        when(executions.findByDeployment_PublicIdAndDeployment_Tenant_Id(any(), any(), any())).thenAnswer(invocation -> {
+            UUID publicId = invocation.getArgument(0);
+            Long tenantId = invocation.getArgument(1);
+            synchronized (rows) {
+                return new PageImpl<>(rows.stream()
+                        .filter(row -> publicId.equals(row.getDeployment().getPublicId())
+                                && tenantId.equals(row.getDeployment().getTenant().getId()))
+                        .toList());
             }
         });
         when(executions.findFirstByStatusOrderByCreatedAtAsc(any())).thenAnswer(invocation -> {
@@ -202,6 +228,7 @@ class WorkerProcessingTest extends SecurityTestBase {
             return node;
         });
         when(workers.findByName(any())).thenAnswer(invocation -> Optional.ofNullable(nodes.get(invocation.getArgument(0))));
+        when(workers.findByIdForUpdate(any())).thenAnswer(invocation -> Optional.ofNullable(nodeById(invocation.getArgument(0))));
         when(workers.touch(any(), any())).thenAnswer(invocation -> {
             WorkerNode node = nodeById(invocation.getArgument(0));
             if (node == null) {
@@ -223,7 +250,33 @@ class WorkerProcessingTest extends SecurityTestBase {
             }
             return count;
         });
-        when(events.save(any(DeploymentEvent.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(events.save(any(DeploymentEvent.class))).thenAnswer(invocation -> {
+            DeploymentEvent event = invocation.getArgument(0);
+            eventRows.add(event);
+            return event;
+        });
+        when(events.findByDeployment_Tenant_Id(any(), any())).thenAnswer(invocation -> {
+            Long tenantId = invocation.getArgument(0);
+            return new PageImpl<>(eventRows.stream()
+                    .filter(event -> tenantId.equals(event.getDeployment().getTenant().getId()))
+                    .toList());
+        });
+        when(deliveries.save(any(com.cloudflow.entity.NotificationDelivery.class))).thenAnswer(invocation -> {
+            noticeRows.add(invocation.getArgument(0));
+            return invocation.getArgument(0);
+        });
+        when(deliveries.existsByUser_IdAndExecution_IdAndChannel(any(), any(), any())).thenAnswer(invocation ->
+                noticeRows.stream().anyMatch(row -> invocation.getArgument(0).equals(row.getUser().getId())
+                        && invocation.getArgument(1).equals(row.getExecution().getId())
+                        && row.getChannel() == invocation.getArgument(2)));
+        when(deliveries.findByUser_Tenant_IdAndUser_PublicId(any(), any(), any())).thenAnswer(invocation -> {
+            Long tenantId = invocation.getArgument(0);
+            UUID userId = invocation.getArgument(1);
+            return new PageImpl<>(noticeRows.stream()
+                    .filter(row -> tenantId.equals(row.getUser().getTenant().getId())
+                            && userId.equals(row.getUser().getPublicId()))
+                    .toList());
+        });
         when(logs.save(any(ExecutionLog.class))).thenAnswer(invocation -> {
             logRows.add(invocation.getArgument(0));
             return invocation.getArgument(0);
@@ -232,7 +285,10 @@ class WorkerProcessingTest extends SecurityTestBase {
 
     private Deployment stored;
     private int versionCount;
+    private final Map<UUID, Deployment> deploymentById = new ConcurrentHashMap<>();
     private final Map<UUID, DeploymentVersion> versionById = new ConcurrentHashMap<>();
+    private final List<DeploymentEvent> eventRows = new ArrayList<>();
+    private final List<com.cloudflow.entity.NotificationDelivery> noticeRows = new ArrayList<>();
 
     @Test
     void authenticationHeartbeatAndStaleWorkers() throws Exception {
@@ -526,17 +582,180 @@ class WorkerProcessingTest extends SecurityTestBase {
         assertEquals(DeploymentStatus.DRAFT, deployment.getStatus());
     }
 
+    @Test
+    void declaredCapacitySkipsWorkAWorkerCannotRun() throws Exception {
+        Deployment large = draft("large");
+        DeploymentVersion largeVersion = version(large);
+        Deployment small = draft("small");
+        DeploymentVersion smallVersion = version(small);
+        queueResources(large, largeVersion, 5000, 64);
+        queueResources(small, smallVersion, 100, 64);
+        register("worker-1");
+        claim();
+        Execution running = rows.stream().filter(row -> row.getStatus() == ExecutionStatus.RUNNING).findFirst().orElseThrow();
+        assertEquals("small", running.getDeployment().getSlug());
+        assertEquals(1, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.QUEUED).count());
+        asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(resourceBody(small, smallVersion, 0, 64)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void fullWorkerDoesNotTakeAnotherFittingTask() throws Exception {
+        Deployment first = draft("first");
+        Deployment second = draft("second");
+        queueResources(first, version(first), 80, 64);
+        queueResources(second, version(second), 80, 64);
+        registerCapacity("worker-1", 100, 512);
+        claim();
+        mockMvc.perform(post("/api/v1/worker/tasks/claim")
+                        .header(AUTHORIZATION, WORKER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"worker-1\"}"))
+                .andExpect(status().isNoContent());
+        assertEquals(1, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.RUNNING).count());
+        assertEquals(1, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.QUEUED).count());
+    }
+
+    @Test
+    void offlineWorkerIsNotScheduled() throws Exception {
+        Deployment deployment = draft("api");
+        queue(deployment, version(deployment), TaskType.DEPLOY);
+        register("worker-1");
+        nodes.get("worker-1").setStatus(WorkerStatus.OFFLINE);
+        mockMvc.perform(post("/api/v1/worker/tasks/claim")
+                        .header(AUTHORIZATION, WORKER)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"worker-1\"}"))
+                .andExpect(status().isConflict());
+        assertEquals(ExecutionStatus.QUEUED, rows.get(0).getStatus());
+    }
+
+    @Test
+    void concurrentClaimsDoNotShareCapacity() throws Exception {
+        Deployment first = draft("first");
+        Deployment second = draft("second");
+        queueResources(first, version(first), 80, 64);
+        queueResources(second, version(second), 80, 64);
+        registerCapacity("worker-1", 100, 512);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        Future<Boolean> left = pool.submit(() -> claimOnce(start));
+        Future<Boolean> right = pool.submit(() -> claimOnce(start));
+        start.countDown();
+        assertEquals(1, (left.get() ? 1 : 0) + (right.get() ? 1 : 0));
+        pool.shutdown();
+        assertEquals(1, rows.stream().filter(row -> row.getStatus() == ExecutionStatus.RUNNING).count());
+    }
+
+    @Test
+    void olderFittingTaskIsClaimedFirst() throws Exception {
+        Deployment older = draft("older");
+        Deployment newer = draft("newer");
+        String firstId = queueResources(older, version(older), 100, 64);
+        queueResources(newer, version(newer), 100, 64);
+        register("worker-1");
+        claim();
+        Execution running = rows.stream().filter(row -> row.getStatus() == ExecutionStatus.RUNNING).findFirst().orElseThrow();
+        assertEquals(firstId, running.getPublicId().toString());
+    }
+
+    @Test
+    void flowRecordsScheduleResultRollbackHealthAuditAndOneNotice() throws Exception {
+        ReflectionTestUtils.setField(member, "id", 7L);
+        when(users.findByTenant_Id(any(), any())).thenReturn(new PageImpl<>(List.of(member)));
+        Deployment deployment = draft("flow");
+        DeploymentVersion first = version(deployment);
+        DeploymentVersion second = version(deployment);
+        String deploy = queue(deployment, first, TaskType.DEPLOY);
+        register("worker-1");
+        claim();
+        finish(deploy, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/executions?page=0&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("SUCCEEDED")))
+                .andExpect(content().string(not(containsString("test-worker-token"))));
+        String next = queue(deployment, second, TaskType.DEPLOY);
+        claim();
+        finish(next, true, "Simulated DEPLOY completed. No cloud provider was contacted.");
+        String rollback = queue(deployment, first, TaskType.ROLLBACK);
+        claim();
+        finish(rollback, true, "Simulated ROLLBACK completed. No cloud provider was contacted.");
+        finish(rollback, true, "Simulated ROLLBACK completed. No cloud provider was contacted.");
+        assertEquals(1, deployment.getCurrentVersionNumber());
+        assertEquals(1, noticeRows.size());
+        String health = queue(deployment, first, TaskType.HEALTH);
+        claim();
+        finish(health, false, "Simulated HEALTH failed. No cloud provider was contacted.");
+        finish(health, false, "Simulated HEALTH failed. No cloud provider was contacted.");
+        assertEquals(2, noticeRows.size());
+        assertEquals(HealthStatus.UNHEALTHY, deployment.getHealthStatus());
+        asUser(member, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UNHEALTHY"))
+                .andExpect(jsonPath("$.simulated").value(true));
+        asUser(member, get("/api/v1/audit?page=0&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("CREATED")))
+                .andExpect(content().string(containsString("STARTED")))
+                .andExpect(content().string(containsString("member@example.com")))
+                .andExpect(content().string(not(containsString("test-worker-token"))));
+        asUser(member, get("/api/v1/notification-deliveries?page=0&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2))
+                .andExpect(content().string(containsString("IN_APP")))
+                .andExpect(content().string(not(containsString("test-worker-token"))));
+        User stranger = user(tenant(2L, "other"), "stranger@example.com", UserRole.OWNER, true);
+        asUser(stranger, get("/api/v1/deployments/" + deployment.getPublicId()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.message").value("Resource not found"));
+        asUser(stranger, get("/api/v1/deployments/" + deployment.getPublicId() + "/health"))
+                .andExpect(status().isNotFound());
+        asUser(stranger, get("/api/v1/audit?page=0&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        asUser(stranger, get("/api/v1/notification-deliveries?page=0&size=20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        mockMvc.perform(get("/api/v1/audit?page=0&size=20"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private boolean claimOnce(CountDownLatch start) throws InterruptedException {
         start.await();
         return workerService.claim("worker-1").isPresent();
     }
 
     private void register(String name) throws Exception {
+        registerCapacity(name, null, null);
+    }
+
+    private void registerCapacity(String name, Integer cpu, Integer memory) throws Exception {
+        String resources = cpu == null ? "" : ",\"cpuMillis\":" + cpu + ",\"memoryMb\":" + memory;
         mockMvc.perform(post("/api/v1/worker/nodes")
                         .header(AUTHORIZATION, WORKER)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"" + name + "\"}"))
+                        .content("{\"name\":\"" + name + "\"" + resources + "}"))
                 .andExpect(status().isOk());
+    }
+
+    private String queueResources(Deployment deployment, DeploymentVersion version, int cpu, int memory) throws Exception {
+        String body = asUser(member, post("/api/v1/executions")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(resourceBody(deployment, version, cpu, memory)))
+                .andExpect(status().isCreated())
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return JsonPath.read(body, "$.publicId");
+    }
+
+    private static String resourceBody(Deployment deployment, DeploymentVersion version, int cpu, int memory) {
+        return """
+                {"deploymentId":"%s","versionId":"%s","taskType":"DEPLOY","cpuMillis":%d,"memoryMb":%d}
+                """
+                .formatted(deployment.getPublicId(), version.getPublicId(), cpu, memory);
     }
 
     private void claim() throws Exception {
@@ -678,23 +897,38 @@ class WorkerProcessingTest extends SecurityTestBase {
         Long id = (Long) arguments[0];
         DeploymentStatus expected = (DeploymentStatus) arguments[1];
         synchronized (rows) {
-            if (stored == null || !id.equals(stored.getId()) || stored.getStatus() != expected) {
+            Deployment deployment = deploymentById.values().stream()
+                    .filter(candidate -> id.equals(candidate.getId()))
+                    .findFirst()
+                    .orElse(null);
+            if (deployment == null || deployment.getStatus() != expected) {
                 return 0;
             }
             if (fromNew) {
-                if (stored.getCurrentVersionNumber() != null) {
+                if (deployment.getCurrentVersionNumber() != null) {
                     return 0;
                 }
-                stored.setStatus((DeploymentStatus) arguments[2]);
-                stored.setCurrentVersionNumber((Integer) arguments[3]);
+                deployment.setStatus((DeploymentStatus) arguments[2]);
+                deployment.setCurrentVersionNumber((Integer) arguments[3]);
                 return 1;
             }
-            if (!arguments[2].equals(stored.getCurrentVersionNumber())) {
+            if (!arguments[2].equals(deployment.getCurrentVersionNumber())) {
                 return 0;
             }
-            stored.setStatus((DeploymentStatus) arguments[3]);
-            stored.setCurrentVersionNumber((Integer) arguments[4]);
+            deployment.setStatus((DeploymentStatus) arguments[3]);
+            deployment.setCurrentVersionNumber((Integer) arguments[4]);
             return 1;
+        }
+    }
+
+    private int runningSum(Long workerId, boolean cpu) {
+        synchronized (rows) {
+            return rows.stream()
+                    .filter(row -> row.getStatus() == ExecutionStatus.RUNNING
+                            && row.getWorkerNode() != null
+                            && workerId.equals(row.getWorkerNode().getId()))
+                    .mapToInt(row -> cpu ? row.getCpuMillis() : row.getMemoryMb())
+                    .sum();
         }
     }
 

@@ -140,6 +140,12 @@ abstract class SecurityTestBase {
         when(executions.findById(any())).thenReturn(Optional.empty());
         when(executions.findFirstByStatusOrderByCreatedAtAsc(any())).thenReturn(Optional.empty());
         when(executions.findByStatus(any())).thenReturn(List.of());
+        when(executions.findByStatusOrderByCreatedAtAsc(any())).thenReturn(List.of());
+        when(executions.sumRunningCpu(any())).thenReturn(0);
+        when(executions.sumRunningMemory(any())).thenReturn(0);
+        when(workers.findByIdForUpdate(any())).thenReturn(Optional.empty());
+        when(events.findByDeployment_Tenant_Id(any(), any(Pageable.class))).thenReturn(Page.empty());
+        when(deliveries.existsByUser_IdAndExecution_IdAndChannel(any(), any(), any())).thenReturn(false);
         when(executions.existsByDeployment_IdAndStatusIn(any(), any())).thenReturn(false);
         when(executions.existsByDeployment_IdAndDeploymentVersion_IdAndStatusAndTaskTypeIn(any(), any(), any(), any()))
                 .thenReturn(false);

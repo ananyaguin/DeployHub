@@ -5,4 +5,5 @@ import java.util.UUID;
 
 import com.cloudflow.entity.WorkerStatus;
 
-public record WorkerNodeResponse(UUID publicId, String name, WorkerStatus status, Instant lastSeenAt) {}
+public record WorkerNodeResponse(
+        UUID publicId, String name, WorkerStatus status, Instant lastSeenAt, int cpuMillis, int memoryMb) {}

@@ -24,10 +24,14 @@ import com.cloudflow.entity.DeploymentStatus;
 import com.cloudflow.entity.DeploymentVersion;
 import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.ExecutionLog;
+import com.cloudflow.entity.DeliveryStatus;
 import com.cloudflow.entity.ExecutionStatus;
 import com.cloudflow.entity.HealthStatus;
 import com.cloudflow.entity.LogLevel;
+import com.cloudflow.entity.NotificationChannel;
+import com.cloudflow.entity.NotificationDelivery;
 import com.cloudflow.entity.TaskType;
+import com.cloudflow.entity.User;
 import com.cloudflow.entity.WorkerNode;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.exception.ConflictException;
@@ -42,7 +46,9 @@ import com.cloudflow.repository.DeploymentRepository;
 import com.cloudflow.repository.DeploymentVersionRepository;
 import com.cloudflow.repository.ExecutionLogRepository;
 import com.cloudflow.repository.ExecutionRepository;
+import com.cloudflow.repository.NotificationDeliveryRepository;
 import com.cloudflow.repository.TenantRepository;
+import com.cloudflow.repository.UserRepository;
 import com.cloudflow.security.AuthenticatedUser;
 import com.cloudflow.security.CurrentUserAccessor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -59,6 +65,8 @@ public class DeploymentService {
     private static final String LOCAL = " No cloud provider was contacted.";
     private static final Collection<ExecutionStatus> OPEN =
             EnumSet.of(ExecutionStatus.QUEUED, ExecutionStatus.RUNNING);
+    private static final int DEFAULT_CPU = 100;
+    private static final int DEFAULT_MEMORY = 64;
     private static final Set<String> FORBIDDEN_ENV = Set.of(
             "PATH", "HOME", "IFS", "ENV", "BASH_ENV", "DOCKER_HOST",
             "LD_PRELOAD", "LD_LIBRARY_PATH", "LD_AUDIT", "LD_DEBUG");
@@ -70,6 +78,8 @@ public class DeploymentService {
     private final DeploymentEventRepository events;
     private final ExecutionRepository executions;
     private final ExecutionLogRepository logs;
+    private final NotificationDeliveryRepository deliveries;
+    private final UserRepository users;
     private final ObjectMapper json;
     private final Clock clock;
 
@@ -81,6 +91,8 @@ public class DeploymentService {
             DeploymentEventRepository events,
             ExecutionRepository executions,
             ExecutionLogRepository logs,
+            NotificationDeliveryRepository deliveries,
+            UserRepository users,
             ObjectMapper json,
             Clock clock) {
         this.currentUser = currentUser;
@@ -90,6 +102,8 @@ public class DeploymentService {
         this.events = events;
         this.executions = executions;
         this.logs = logs;
+        this.deliveries = deliveries;
+        this.users = users;
         this.json = json;
         this.clock = clock;
     }
@@ -183,15 +197,18 @@ public class DeploymentService {
         UUID deploymentId = UUID.fromString(request.deploymentId());
         Deployment deployment = requireDeployment(deploymentId);
         DeploymentVersion version = requireVersion(deploymentId, UUID.fromString(request.versionId()));
+        int cpu = request.cpuMillis() == null ? DEFAULT_CPU : request.cpuMillis();
+        int memory = request.memoryMb() == null ? DEFAULT_MEMORY : request.memoryMb();
         return switch (request.taskType()) {
-            case DEPLOY -> change(deployment, version, TaskType.DEPLOY);
-            case ROLLBACK -> change(deployment, version, TaskType.ROLLBACK);
-            case STOP -> change(deployment, version, TaskType.STOP);
-            case HEALTH -> change(deployment, version, TaskType.HEALTH);
+            case DEPLOY -> change(deployment, version, TaskType.DEPLOY, cpu, memory);
+            case ROLLBACK -> change(deployment, version, TaskType.ROLLBACK, cpu, memory);
+            case STOP -> change(deployment, version, TaskType.STOP, cpu, memory);
+            case HEALTH -> change(deployment, version, TaskType.HEALTH, cpu, memory);
         };
     }
 
-    private ExecutionResponse change(Deployment deployment, DeploymentVersion version, TaskType task) {
+    private ExecutionResponse change(
+            Deployment deployment, DeploymentVersion version, TaskType task, int cpu, int memory) {
         Integer current = deployment.getCurrentVersionNumber();
         switch (task) {
             case DEPLOY -> deploy(deployment, version, current);
@@ -203,7 +220,7 @@ public class DeploymentService {
         if (executions.existsByDeployment_IdAndStatusIn(deployment.getId(), OPEN)) {
             throw new ConflictException(STATE);
         }
-        return queue(deployment, version, task);
+        return queue(deployment, version, task, cpu, memory);
     }
 
     @Transactional
@@ -252,15 +269,24 @@ public class DeploymentService {
             versions.save(execution.getDeploymentVersion());
         }
         String detail = sanitize(message);
+        String actor = "worker:" + worker.getName();
         if (execution.getTaskType() == TaskType.HEALTH) {
-            recordSimulatedHealth(execution, succeeded, detail);
+            recordSimulatedHealth(execution, succeeded, detail, actor);
         }
         writeLog(execution, succeeded ? LogLevel.INFO : LogLevel.ERROR, detail);
         event(
                 execution.getDeployment(),
                 execution.getDeploymentVersion(),
+                execution,
                 succeeded ? "SUCCEEDED" : "FAILED",
-                noted(detail));
+                noted(detail),
+                actor);
+        if (!succeeded && execution.getTaskType() != TaskType.HEALTH) {
+            notice(execution, execution.getTaskType() + " failed. The previous version stays in place.");
+        }
+        if (succeeded && execution.getTaskType() == TaskType.ROLLBACK) {
+            notice(execution, "Rollback succeeded. No cloud provider was contacted.");
+        }
         return response(execution);
     }
 
@@ -312,7 +338,7 @@ public class DeploymentService {
                 EnumSet.of(TaskType.DEPLOY, TaskType.ROLLBACK));
     }
 
-    private void recordSimulatedHealth(Execution execution, boolean succeeded, String detail) {
+    private void recordSimulatedHealth(Execution execution, boolean succeeded, String detail, String actor) {
         String storedDetail = detail.length() > 500 ? detail.substring(0, 500) : detail;
         Deployment deployment = execution.getDeployment();
         deployment.setHealthCheckedAt(clock.instant());
@@ -324,14 +350,17 @@ public class DeploymentService {
             int streak = deployment.getHealthFailureStreak() + 1;
             deployment.setHealthFailureStreak(streak);
             deployment.setHealthStatus(HealthStatus.UNHEALTHY);
+            if (streak == 1) {
+                notice(execution, "Simulated health is unhealthy. No cloud provider was contacted.");
+            }
             if (streak == 3) {
-                recoverOnce(deployment);
+                recoverOnce(deployment, actor);
             }
         }
         deployments.save(deployment);
     }
 
-    private void recoverOnce(Deployment deployment) {
+    private void recoverOnce(Deployment deployment, String actor) {
         Integer current = deployment.getCurrentVersionNumber();
         if (deployment.getStatus() != DeploymentStatus.ACTIVE || current == null) {
             return;
@@ -346,23 +375,27 @@ public class DeploymentService {
                 continue;
             }
             try {
-                queue(deployment, candidate, TaskType.ROLLBACK);
+                queue(deployment, candidate, TaskType.ROLLBACK, DEFAULT_CPU, DEFAULT_MEMORY);
             } catch (ConflictException ex) {
                 event(
                         deployment,
                         candidate,
+                        null,
                         "UNHEALTHY",
-                        "Simulated health failed 3 times. Rollback was not queued." + LOCAL);
+                        "Simulated health failed 3 times. Rollback was not queued." + LOCAL,
+                        actor);
                 return;
             }
             event(
                     deployment,
                     candidate,
+                    null,
                     "UNHEALTHY",
                     "Simulated health failed 3 times. Queued rollback to version "
                             + candidate.getVersionNumber()
                             + "."
-                            + LOCAL);
+                            + LOCAL,
+                    actor);
             return;
         }
     }
@@ -397,20 +430,23 @@ public class DeploymentService {
         claim(deployment, deployment.getStatus(), current, next, nextVersion);
     }
 
-    private ExecutionResponse queue(Deployment deployment, DeploymentVersion version, TaskType task) {
+    private ExecutionResponse queue(
+            Deployment deployment, DeploymentVersion version, TaskType task, int cpu, int memory) {
         Execution execution = new Execution();
         execution.setDeployment(deployment);
         execution.setDeploymentVersion(version);
         execution.setTaskType(task);
         execution.setStatus(ExecutionStatus.QUEUED);
         execution.setAttemptCount(0);
+        execution.setCpuMillis(cpu);
+        execution.setMemoryMb(memory);
         execution.assignIdentity();
         try {
             execution = executions.saveAndFlush(execution);
         } catch (DataIntegrityViolationException ex) {
             throw new ConflictException(STATE);
         }
-        event(deployment, version, "QUEUED", "Queued " + task + " for a worker." + LOCAL);
+        event(deployment, version, execution, "QUEUED", "Queued " + task + " for a worker." + LOCAL, null);
         return response(execution);
     }
 
@@ -509,12 +545,53 @@ public class DeploymentService {
     }
 
     private void event(Deployment deployment, DeploymentVersion version, String type, String message) {
+        event(deployment, version, null, type, message, null);
+    }
+
+    private void event(
+            Deployment deployment,
+            DeploymentVersion version,
+            Execution execution,
+            String type,
+            String message,
+            String actor) {
         DeploymentEvent event = new DeploymentEvent();
         event.setDeployment(deployment);
         event.setDeploymentVersion(version);
+        event.setExecution(execution);
         event.setEventType(type);
         event.setMessage(message);
+        if (actor == null) {
+            actor = currentUser.current().map(AuthenticatedUser::getUsername).orElse(null);
+        }
+        event.setActorLabel(actor);
         events.save(event);
+    }
+
+    private void notice(Execution execution, String summary) {
+        if (execution.getId() == null || execution.getDeployment().getTenant() == null) {
+            return;
+        }
+        String text = summary.length() > 500 ? summary.substring(0, 500) : summary;
+        for (User user : users.findByTenant_Id(execution.getDeployment().getTenant().getId(), PageRequest.of(0, 50))) {
+            if (user.getId() == null
+                    || deliveries.existsByUser_IdAndExecution_IdAndChannel(
+                            user.getId(), execution.getId(), NotificationChannel.IN_APP)) {
+                continue;
+            }
+            NotificationDelivery delivery = new NotificationDelivery();
+            delivery.setUser(user);
+            delivery.setExecution(execution);
+            delivery.setChannel(NotificationChannel.IN_APP);
+            delivery.setStatus(DeliveryStatus.SENT);
+            delivery.setSentAt(clock.instant());
+            delivery.setSummary(text);
+            try {
+                deliveries.save(delivery);
+            } catch (DataIntegrityViolationException ex) {
+                // The unique key already recorded this notice.
+            }
+        }
     }
 
     private Deployment requireDeployment(UUID publicId) {

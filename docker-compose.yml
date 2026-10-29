@@ -48,6 +48,8 @@ services:
       WORKER_TOKEN: ${WORKER_TOKEN:?Set WORKER_TOKEN}
       WORKER_NAME: worker-1
       WORKER_EXECUTOR: simulator
+      DOCKER_CPU_MILLIS: "500"
+      DOCKER_MEMORY_MB: "256"
     depends_on:
       backend:
         condition: service_healthy

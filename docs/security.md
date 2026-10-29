@@ -29,7 +29,7 @@ An `OWNER` or `ADMIN` can add a user with `POST /api/v1/users`. That user joins 
 
 ## Tenant isolation
 
-Deployment, version, event, audit, execution, log, health, and notification reads and writes use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. A tenant id in a JSON body is ignored. Notification reads also use the caller's user id.
+Deployment, version, event, audit, execution, log, health, operations, and notification reads and writes use the tenant id on the authenticated user. A resource in another tenant is a 404, the same response as a missing id. A tenant id in a JSON body is ignored. Notification reads also use the caller's user id. `GET /api/v1/operations` counts that tenant's executions. Its worker totals are the shared pool and do not include worker names or tokens. `GET /api/v1/health` and `GET /actuator/health` are process liveness. Actuator exposes health only, with details hidden. Other actuator paths require a user token and are not part of the public API.
 
 Deployment status stays `DRAFT`, `ACTIVE`, or `ARCHIVED`. `POST /api/v1/executions` only queues a task. The deployment status changes when a worker reports that the task finished, and only if the status and current version still match. A second open task for the same deployment is rejected. Two workers cannot both claim one queued row: the update matches `QUEUED`.
 

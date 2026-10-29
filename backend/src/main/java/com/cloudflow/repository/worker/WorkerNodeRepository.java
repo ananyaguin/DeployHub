@@ -3,6 +3,7 @@ package com.cloudflow.repository.worker;
 import com.cloudflow.entity.WorkerNode;
 import com.cloudflow.entity.WorkerStatus;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.LockModeType;
@@ -27,6 +28,14 @@ public interface WorkerNodeRepository extends JpaRepository<WorkerNode, Long> {
     Page<WorkerNode> findByStatus(WorkerStatus status, Pageable pageable);
 
     boolean existsByStatusAndLastSeenAtAfter(WorkerStatus status, Instant seenAfter);
+
+    long countByStatus(WorkerStatus status);
+
+    @Query("""
+            select w.cpuMillis, w.memoryMb from WorkerNode w
+            where w.status = com.cloudflow.entity.WorkerStatus.ONLINE
+            """)
+    List<Object[]> onlineCapacity();
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

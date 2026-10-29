@@ -11,6 +11,7 @@ import com.cloudflow.dto.response.ExecutionLogResponse;
 import com.cloudflow.dto.response.ExecutionResponse;
 import com.cloudflow.dto.response.NotificationDeliveryResponse;
 import com.cloudflow.dto.response.NotificationPreferenceResponse;
+import com.cloudflow.dto.response.OperationsResponse;
 import com.cloudflow.dto.response.PageResponse;
 import com.cloudflow.service.OwnedResourceService;
 import jakarta.validation.Valid;
@@ -50,6 +51,11 @@ public class OwnedResourceController {
     @GetMapping("/api/v1/audit")
     public PageResponse<DeploymentEventResponse> audit(@Valid PageQuery page) {
         return resources.audit(page);
+    }
+
+    @GetMapping("/api/v1/operations")
+    public OperationsResponse operations() {
+        return resources.operations();
     }
 
     @GetMapping("/api/v1/deployments/{deploymentId}/executions")

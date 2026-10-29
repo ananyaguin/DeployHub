@@ -159,4 +159,11 @@ curl -s http://127.0.0.1:8080/api/v1/health
 docker compose down
 ```
 
-The API image is the backend jar on Java 17. Curl is installed there so Compose can call `GET /api/v1/health`. The frontend image is nginx serving `frontend/dist`, and `/verify-email` and `/reset-password` fall back to `index.html`. Compose was not run in the environment where these files were added, because Docker was not installed. Do not treat the stack as verified until those commands succeed.
+The API image is the backend jar on Java 17. Curl is installed there so Compose can call `GET /api/v1/health`. The frontend image is nginx serving `frontend/dist`, and `/verify-email` and `/reset-password` fall back to `index.html`. The worker image has no HTTP port. Compose sets `WORKER_EXECUTOR=simulator` and declared `DOCKER_CPU_MILLIS=500` and `DOCKER_MEMORY_MB=256`. The Docker socket is not mounted. Compose was not run in the environment where these files were added, because Docker was not installed. Do not treat the stack as verified until those commands succeed.
+
+## Troubleshooting
+
+- `Communications link failure` or a missing datasource property: MySQL is down, or `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, or `SPRING_DATASOURCE_PASSWORD` is unset. Quote the JDBC URL in zsh.
+- Worker requests return 401: `WORKER_TOKEN` is empty or does not match the API. Set the same non-empty value in both shells.
+- The browser shows a network error or 401: `VITE_API_BASE_URL` must point at the API, and `CORS_ALLOWED_ORIGINS` must include the page origin.
+- `DockerDaemonTest` is skipped: `/var/run/docker.sock` is not readable. `mvn verify` does not need Docker. Simulator mode is the default.

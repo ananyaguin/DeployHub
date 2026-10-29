@@ -38,6 +38,19 @@ public interface ExecutionRepository extends JpaRepository<Execution, Long> {
 
     List<Execution> findByStatus(ExecutionStatus status);
 
+    long countByDeployment_Tenant_IdAndStatus(Long tenantId, ExecutionStatus status);
+
+    long countByDeployment_Tenant_IdAndTaskTypeAndStatus(Long tenantId, TaskType taskType, ExecutionStatus status);
+
+    long countByDeployment_Tenant_IdAndAttemptCountGreaterThan(Long tenantId, int attemptCount);
+
+    @Query("""
+            select e.cpuMillis, e.memoryMb from Execution e
+            where e.deployment.tenant.id = :tenantId
+              and e.status = com.cloudflow.entity.ExecutionStatus.QUEUED
+            """)
+    List<Object[]> queuedDemand(@Param("tenantId") Long tenantId);
+
     @Query("""
             select coalesce(sum(e.cpuMillis), 0) from Execution e
             where e.workerNode.id = :workerId

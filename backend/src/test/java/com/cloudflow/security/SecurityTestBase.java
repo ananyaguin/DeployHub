@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.when;
 import static org.springframework.http.HttpHeaders.AUTHORIZATION;
@@ -153,6 +154,12 @@ abstract class SecurityTestBase {
                 .thenReturn(List.of());
         when(workers.findByName(any())).thenReturn(Optional.empty());
         when(workers.existsByStatusAndLastSeenAtAfter(any(), any())).thenReturn(false);
+        when(workers.countByStatus(any())).thenReturn(0L);
+        when(workers.onlineCapacity()).thenReturn(List.of());
+        when(executions.queuedDemand(any())).thenReturn(List.of());
+        when(executions.countByDeployment_Tenant_IdAndStatus(any(), any())).thenReturn(0L);
+        when(executions.countByDeployment_Tenant_IdAndTaskTypeAndStatus(any(), any(), any())).thenReturn(0L);
+        when(executions.countByDeployment_Tenant_IdAndAttemptCountGreaterThan(any(), anyInt())).thenReturn(0L);
         when(workers.findByPublicId(any())).thenReturn(Optional.empty());
         when(workers.markStale(any())).thenReturn(0);
         when(logs.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

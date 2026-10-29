@@ -8,7 +8,7 @@ import { followLink } from '../routes/navigate'
 export function DashboardPage() {
   useDocumentTitle('Dashboard · DeployHub')
   const [state, setState] = useState({
-    status: 'loading', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], error: '',
+    status: 'loading', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], operations: null, error: '',
   })
 
   useEffect(() => {
@@ -29,6 +29,7 @@ export function DashboardPage() {
       const events = eventPages.flat().sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt))).slice(0, 8)
       const audit = await api('/api/v1/audit?page=0&size=8').catch(() => null)
       const notices = await api('/api/v1/notification-deliveries?page=0&size=8').catch(() => null)
+      const operations = await api('/api/v1/operations').catch(() => null)
       return {
         deployments: items,
         total: Number(first.total),
@@ -36,11 +37,12 @@ export function DashboardPage() {
         events,
         audit: audit?.items || [],
         notices: notices?.items || [],
+        operations,
       }
     }
     load().then(
       (data) => { if (live) setState({ status: 'ready', error: '', ...data }) },
-      (error) => { if (live) setState({ status: 'error', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], error: errorText(error) }) },
+      (error) => { if (live) setState({ status: 'error', deployments: [], total: 0, complete: true, events: [], audit: [], notices: [], operations: null, error: errorText(error) }) },
     )
     return () => { live = false }
   }, [])
@@ -60,6 +62,7 @@ export function DashboardPage() {
       </div>
       {state.status === 'loading' ? <p className="muted">Loading deployments…</p> : null}
       <Alert>{state.status === 'error' ? state.error : ''}</Alert>
+      {state.status === 'ready' ? <OperationsSummary operations={state.operations} /> : null}
       {state.status === 'ready' && state.total === 0 ? (
         <div className="panel">
           <h2>No deployments yet</h2>
@@ -121,6 +124,33 @@ export function DashboardPage() {
         </>
       ) : null}
     </section>
+  )
+}
+
+function OperationsSummary({ operations }) {
+  if (!operations) return <p className="muted">Operations summary unavailable.</p>
+  const items = [
+    ['Queued', operations.queued],
+    ['Running', operations.running],
+    ['Succeeded', operations.succeeded],
+    ['Failed', operations.failed],
+    ['Retried', operations.retried],
+    ['Rollback succeeded', operations.rollbackSucceeded],
+    ['Rollback failed', operations.rollbackFailed],
+    ['Scheduling blocked', operations.schedulingBlocked],
+    ['Workers online', operations.workersOnline],
+    ['Workers offline', operations.workersOffline],
+  ]
+  return (
+    <div className="panel">
+      <h2>Operations</h2>
+      <p className="muted">Execution counts are this tenant. Worker totals are the shared pool. Capacity is declared, not measured. This summary is separate from API liveness and from a deployment&apos;s simulated health.</p>
+      <div className="stats">
+        {items.map(([label, value]) => (
+          <article className="stat" key={label}><span>{label}</span><strong>{value}</strong></article>
+        ))}
+      </div>
+    </div>
   )
 }
 

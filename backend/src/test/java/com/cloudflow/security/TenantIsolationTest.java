@@ -18,6 +18,7 @@ import com.cloudflow.entity.TaskType;
 import com.cloudflow.entity.Tenant;
 import com.cloudflow.entity.User;
 import com.cloudflow.entity.UserRole;
+import com.cloudflow.entity.WorkerStatus;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
@@ -170,6 +171,54 @@ class TenantIsolationTest extends SecurityTestBase {
         expectFound(stranger, get("/api/v1/notification-deliveries?page=0&size=20"), "$.total", 1);
 
         verify(deployments, atLeastOnce()).findByPublicIdAndTenant_Id(deployment.getPublicId(), 1L);
+    }
+
+    @Test
+    void operationsCountsStayInsideTheTenantAndActuatorStaysClosed() throws Exception {
+        mockMvc.perform(get("/api/v1/operations"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/v1/operations").header("Authorization", "Worker test-worker-token"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/env"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"))
+                .andExpect(jsonPath("$.components").doesNotExist());
+
+        when(executions.countByDeployment_Tenant_IdAndStatus(eq(1L), eq(ExecutionStatus.QUEUED))).thenReturn(2L);
+        when(executions.countByDeployment_Tenant_IdAndStatus(eq(1L), eq(ExecutionStatus.RUNNING))).thenReturn(1L);
+        when(executions.countByDeployment_Tenant_IdAndStatus(eq(1L), eq(ExecutionStatus.SUCCEEDED))).thenReturn(4L);
+        when(executions.countByDeployment_Tenant_IdAndStatus(eq(1L), eq(ExecutionStatus.FAILED))).thenReturn(3L);
+        when(executions.countByDeployment_Tenant_IdAndAttemptCountGreaterThan(eq(1L), eq(1))).thenReturn(2L);
+        when(executions.countByDeployment_Tenant_IdAndTaskTypeAndStatus(
+                eq(1L), eq(TaskType.ROLLBACK), eq(ExecutionStatus.SUCCEEDED))).thenReturn(1L);
+        when(executions.countByDeployment_Tenant_IdAndTaskTypeAndStatus(
+                eq(1L), eq(TaskType.ROLLBACK), eq(ExecutionStatus.FAILED))).thenReturn(1L);
+        when(executions.queuedDemand(1L)).thenReturn(List.<Object[]>of(new Object[] {5000, 64}, new Object[] {100, 64}));
+        when(workers.countByStatus(WorkerStatus.ONLINE)).thenReturn(1L);
+        when(workers.countByStatus(WorkerStatus.OFFLINE)).thenReturn(2L);
+        when(workers.onlineCapacity()).thenReturn(List.<Object[]>of(new Object[] {1000, 512}));
+
+        User owner = user(tenant(1L, "acme"), "ada@example.com", UserRole.OWNER, true);
+        User stranger = user(tenant(2L, "other"), "bob@example.com", UserRole.OWNER, true);
+        expectFound(owner, get("/api/v1/operations"), "$.queued", 2);
+        expectFound(owner, get("/api/v1/operations"), "$.running", 1);
+        expectFound(owner, get("/api/v1/operations"), "$.succeeded", 4);
+        expectFound(owner, get("/api/v1/operations"), "$.failed", 3);
+        expectFound(owner, get("/api/v1/operations"), "$.retried", 2);
+        expectFound(owner, get("/api/v1/operations"), "$.rollbackSucceeded", 1);
+        expectFound(owner, get("/api/v1/operations"), "$.rollbackFailed", 1);
+        expectFound(owner, get("/api/v1/operations"), "$.schedulingBlocked", 1);
+        expectFound(owner, get("/api/v1/operations"), "$.workersOnline", 1);
+        expectFound(owner, get("/api/v1/operations"), "$.workersOffline", 2);
+        expectFound(owner, get("/api/v1/operations"), "$.capacityDeclared", true);
+        expectFound(stranger, get("/api/v1/operations"), "$.queued", 0);
+        expectFound(stranger, get("/api/v1/operations"), "$.schedulingBlocked", 0);
+
+        when(workers.onlineCapacity()).thenReturn(List.of());
+        when(executions.queuedDemand(1L)).thenReturn(List.<Object[]>of(new Object[] {100, 64}));
+        expectFound(owner, get("/api/v1/operations"), "$.schedulingBlocked", 1);
     }
 
     private void expectMissing(User user, MockHttpServletRequestBuilder request)

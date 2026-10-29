@@ -1,6 +1,7 @@
 package com.cloudflow.service;
 
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 
 import com.cloudflow.configuration.WorkerProperties;
@@ -13,6 +14,7 @@ import com.cloudflow.dto.response.ExecutionLogResponse;
 import com.cloudflow.dto.response.ExecutionResponse;
 import com.cloudflow.dto.response.NotificationDeliveryResponse;
 import com.cloudflow.dto.response.NotificationPreferenceResponse;
+import com.cloudflow.dto.response.OperationsResponse;
 import com.cloudflow.dto.response.PageResponse;
 import com.cloudflow.entity.Deployment;
 import com.cloudflow.entity.DeploymentEvent;
@@ -21,7 +23,9 @@ import com.cloudflow.entity.Execution;
 import com.cloudflow.entity.HealthStatus;
 import com.cloudflow.entity.WorkerStatus;
 import com.cloudflow.entity.ExecutionLog;
+import com.cloudflow.entity.ExecutionStatus;
 import com.cloudflow.entity.NotificationDelivery;
+import com.cloudflow.entity.TaskType;
 import com.cloudflow.exception.NotFoundException;
 import com.cloudflow.repository.DeploymentEventRepository;
 import com.cloudflow.repository.DeploymentRepository;
@@ -151,6 +155,59 @@ public class OwnedResourceService {
                 page.page(),
                 page.size(),
                 results.getTotalElements());
+    }
+
+    @Transactional(readOnly = true)
+    public OperationsResponse operations() {
+        AuthenticatedUser caller = currentUser.require();
+        Long tenantId = caller.tenantKey();
+        List<Object[]> demand = executions.queuedDemand(tenantId);
+        List<Object[]> online = workers.onlineCapacity();
+        return new OperationsResponse(
+                count(tenantId, ExecutionStatus.QUEUED),
+                count(tenantId, ExecutionStatus.RUNNING),
+                count(tenantId, ExecutionStatus.SUCCEEDED),
+                count(tenantId, ExecutionStatus.FAILED),
+                executions.countByDeployment_Tenant_IdAndAttemptCountGreaterThan(tenantId, 1),
+                executions.countByDeployment_Tenant_IdAndTaskTypeAndStatus(
+                        tenantId, TaskType.ROLLBACK, ExecutionStatus.SUCCEEDED),
+                executions.countByDeployment_Tenant_IdAndTaskTypeAndStatus(
+                        tenantId, TaskType.ROLLBACK, ExecutionStatus.FAILED),
+                schedulingBlocked(demand, online),
+                workers.countByStatus(WorkerStatus.ONLINE),
+                workers.countByStatus(WorkerStatus.OFFLINE),
+                true);
+    }
+
+    private long count(Long tenantId, ExecutionStatus status) {
+        return executions.countByDeployment_Tenant_IdAndStatus(tenantId, status);
+    }
+
+    private static long schedulingBlocked(List<Object[]> demand, List<Object[]> online) {
+        if (demand == null || demand.isEmpty()) {
+            return 0;
+        }
+        long blocked = 0;
+        for (Object[] task : demand) {
+            int cpu = ((Number) task[0]).intValue();
+            int memory = ((Number) task[1]).intValue();
+            if (!fits(online, cpu, memory)) {
+                blocked++;
+            }
+        }
+        return blocked;
+    }
+
+    private static boolean fits(List<Object[]> online, int cpu, int memory) {
+        if (online == null) {
+            return false;
+        }
+        for (Object[] worker : online) {
+            if (((Number) worker[0]).intValue() >= cpu && ((Number) worker[1]).intValue() >= memory) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Transactional(readOnly = true)

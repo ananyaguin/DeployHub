@@ -132,7 +132,21 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 
 `V4__execution_attempt_count.sql` adds `executions.attempt_count`. It counts claims, not a new execution row.
 
-`V5__version_image_and_container.sql` adds nullable `deployment_versions.image_ref`, `env_json`, and `container_id`. `env_json` holds environment values for the worker. User APIs do not return it. V1 through V4 were not edited. None of these migrations has been applied on this machine, and MySQL 8 has not been used to apply them.
+`V5__version_image_and_container.sql` adds nullable `deployment_versions.image_ref`, `env_json`, and `container_id`. `env_json` holds environment values for the worker. User APIs do not return it. V1 through V4 were not edited.
+
+`V6__one_open_execution.sql` adds a virtual column so one deployment has at most one `QUEUED` or `RUNNING` execution.
+
+`V7__deployment_health.sql` adds simulated health columns on `deployments` and allows task type `HEALTH`.
+
+`V8__declared_capacity_and_notices.sql` adds declared `cpu_millis` and `memory_mb` on workers and executions, actor and execution columns on events, and in-app notification support. Those CPU and memory values are declared, not measured on the host.
+
+Flyway applies a pending file when the API starts. Confirm the database with:
+
+```sql
+SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;
+```
+
+`success` should be 1 for every applied version. Do not edit a file that is already in that table. The next change is a new version, not an edit of V1–V8.
 
 | Table | Owned by | Notes |
 | --- | --- | --- |
@@ -140,20 +154,20 @@ Start the backend again. Flyway applies `V1` to the empty database. The applicat
 | `users` | tenant, cascade delete | One tenant per user. Email is unique inside the tenant. `password_hash` is required. Role is `OWNER`, `ADMIN`, or `MEMBER`. |
 | `email_verification_tokens` | user, cascade delete | `token_hash` is unique SHA-256 hex. `used_at` null means unused. |
 | `password_reset_tokens` | user, cascade delete | Same hash and expiry rules. |
-| `worker_nodes` | global | No tenant and no capacity column. Status `ONLINE` or `OFFLINE`. |
-| `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. `current_version_number` is the live version after V3. |
+| `worker_nodes` | global | No tenant. Status `ONLINE` or `OFFLINE`. V8 adds declared `cpu_millis` and `memory_mb`. |
+| `deployments` | tenant, cascade delete | Slug is unique per tenant. Status `DRAFT`, `ACTIVE`, or `ARCHIVED`. `current_version_number` is the live version after V3. V7 adds simulated health columns. |
 | `deployment_versions` | deployment, cascade delete | `version_number` is unique per deployment. V5 adds nullable `image_ref`, `env_json`, and `container_id`. |
-| `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. |
-| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, or `STOP`. `attempt_count` is added in V4. |
+| `deployment_events` | deployment, cascade delete | Optional version. Version delete also removes those events. V8 adds `actor_label` and a nullable execution id. |
+| `executions` | deployment and version, cascade delete | Worker delete sets `worker_node_id` null. Status `QUEUED`, `RUNNING`, `SUCCEEDED`, `FAILED`, or `CANCELLED`. Task type `DEPLOY`, `ROLLBACK`, `STOP`, or `HEALTH`. `attempt_count` is added in V4. V8 adds declared `cpu_millis` and `memory_mb`. |
 | `execution_logs` | execution, cascade delete | Unique `(execution_id, sequence_no)` is the read index. |
 | `notification_preferences` | user, cascade delete | One row per user. `email_enabled` only. |
-| `notification_deliveries` | user, cascade delete | Optional execution; execution delete sets that id null. Channel `EMAIL`. Status `PENDING`, `SENT`, or `FAILED`. |
+| `notification_deliveries` | user, cascade delete | Optional execution; execution delete sets that id null. Channel `EMAIL` or `IN_APP`. Status `PENDING`, `SENT`, or `FAILED`. V8 adds `summary`. |
 
 Assumptions kept small on purpose:
 
 - Accounts are local password accounts. There is no external-identity table.
 - A person who works in two tenants has two user rows.
 - A version may store one image reference and environment JSON. Schedules are not columns.
-- Notification preferences cover email only.
+- Notification preferences cover email only. In-app notices are delivery rows, not a second preference.
 - A delivery may exist before it is tied to an execution.
-- Worker capacity is not stored. A later migration can add it when a scheduler needs it.
+- Worker capacity is declared on the worker row. It is not a reading from the host.

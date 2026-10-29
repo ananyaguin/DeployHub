@@ -63,6 +63,8 @@ Remove one by the id from that list: `docker rm -f <container-id>`. Do not remov
 
 When Docker mode reports `Docker is unavailable.`, check that the daemon is running and that `DOCKER_HOST` points at it. `Docker could not complete the task.` means the daemon answered and the operation failed, for example a pull of a missing public image. There is no registry login in this stage.
 
+`DockerDaemonTest` pings a live daemon only when `CLOUDFLOW_DOCKER_TESTS=true` and `/var/run/docker.sock` is readable. Routine `mvn verify` and GitHub Actions do not set that variable. A missing socket is covered by a test that does not need a daemon. GitHub-hosted runners have a socket, so socket presence alone is not the switch.
+
 ## Frontend
 
 From the repository root:
@@ -80,7 +82,25 @@ Vite loads environment files from the repository root (`envDir` is `..`). The on
 
 ## Email
 
-Copy the SMTP placeholders from `.env.example` and export them in the shell that starts the backend. Leave `SMTP_HOST` empty to boot without a mail server. Verification and reset links are built from `MAIL_VERIFICATION_URL` and `MAIL_RESET_URL`.
+Registration creates the account only after the verification message is accepted by SMTP. An empty `SMTP_HOST` leaves the mail sender unset, `POST /api/v1/auth/register` returns 503 `Email could not be sent`, and the account is not stored. The same failure is returned when the server rejects the message. The response does not include the token or the SMTP error.
+
+Export these in the backend shell. Placeholders are in `.env.example`. Do not commit real values.
+
+| Variable | Local example | Required to send |
+| --- | --- | --- |
+| `SMTP_HOST` | `127.0.0.1` | Yes. Empty disables sending. |
+| `SMTP_PORT` | `1025` | Yes when a host is set. Default in the file is `587`. |
+| `SMTP_USERNAME` | empty | Only when the server requires auth. |
+| `SMTP_PASSWORD` | empty | Only when the server requires auth. |
+| `SMTP_FROM` | `no-reply@localhost` | Yes. |
+| `MAIL_VERIFICATION_URL` | `http://localhost:5173/verify-email` | Yes. This is the page that reads `token` and posts it. |
+| `MAIL_VERIFICATION_TTL` | `24h` | Yes. A positive duration. |
+| `MAIL_RESET_URL` | `http://localhost:5173/reset-password` | Yes for password reset. |
+| `MAIL_RESET_TTL` | `30m` | Yes for password reset. |
+
+The message body is `MAIL_VERIFICATION_URL` plus `?token=` and the raw token. The frontend route is `/verify-email`. It posts `{ "token": "<value>" }` to `POST /api/v1/auth/verify-email` with no session. A valid unused token returns 204 and sets `email_verified_at`. The same token, an unknown token, or an expired token returns 400. Login before that timestamp returns 403 `Email verification required`.
+
+The page is served by the frontend. `MAIL_VERIFICATION_URL` must be an origin the browser can open, and that frontend's `VITE_API_BASE_URL` must reach the API. Compose sets `SMTP_HOST` to empty, so the Compose stack does not send confirmation mail until those SMTP variables are supplied to the backend service.
 
 Local catcher, from the repository root, if Docker is installed:
 

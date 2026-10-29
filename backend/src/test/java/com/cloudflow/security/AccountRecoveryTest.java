@@ -78,7 +78,11 @@ class AccountRecoveryTest extends SecurityTestBase {
     @Test
     void verificationAcceptsOneTokenAndThenRejectsIt() throws Exception {
         User owner = register();
-        String raw = lastToken();
+        ArgumentCaptor<SimpleMailMessage> sent = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(mail, atLeastOnce()).send(sent.capture());
+        String link = sent.getValue().getText();
+        assertTrue(link.startsWith("http://localhost:5173/verify-email?token="));
+        String raw = link.substring(link.lastIndexOf("token=") + "token=".length());
         String body = mockMvc.perform(post("/api/v1/auth/verify-email")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"token\":\"" + raw + "\"}"))

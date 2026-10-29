@@ -39,7 +39,7 @@ In-app notices use the existing notification deliveries with channel `IN_APP`. O
 
 `GET /api/v1/operations` returns counts for the caller's tenant: queued, running, succeeded, failed, retried (`attemptCount` greater than 1), rollback succeeded, and rollback failed. `schedulingBlocked` is the number of that tenant's queued executions that fit no online worker's declared capacity, including the case where no worker is online. `workersOnline` and `workersOffline` count the shared pool and do not name workers or include tokens. `capacityDeclared` is true. This endpoint is not `GET /api/v1/health` and it is not `GET /api/v1/deployments/{id}/health`.
 
-`mvn verify` from the repository root runs the backend and worker tests. It does not need MySQL, SMTP, Docker, or a network. One worker test skips when `/var/run/docker.sock` is missing. In `frontend/`, `npm ci`, `npm run lint`, and `npm run build` check the UI.
+`mvn verify` from the repository root runs the backend and worker tests. It does not need MySQL, SMTP, Docker, or a network. The live Docker ping skips unless `CLOUDFLOW_DOCKER_TESTS=true` and `/var/run/docker.sock` is readable. In `frontend/`, `npm ci`, `npm run lint`, and `npm run build` check the UI.
 
 ## Run locally
 
@@ -112,7 +112,7 @@ SELECT version, description, success FROM flyway_schema_history ORDER BY install
 - Database connection failure: MySQL must be listening, and `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`, and `SPRING_DATASOURCE_PASSWORD` must be set. Quote the JDBC URL in zsh so `&` is not treated as a job control character. The Compose stack uses its own database and does not read the host URL.
 - Worker token rejected: the API and the worker must use the same non-empty `WORKER_TOKEN`. A mismatch or a blank token returns 401. The worker then exits or retries without claiming work.
 - Frontend API errors: `VITE_API_BASE_URL` must be the API the browser can reach, default `http://localhost:8080`. `CORS_ALLOWED_ORIGINS` must include the frontend origin, default `http://localhost:5173`. A 401 means the session token is missing or expired.
-- Docker-unavailable tests: `mvn verify` still passes. `DockerDaemonTest` skips when `/var/run/docker.sock` is not readable. Simulator mode does not need a daemon.
+- Docker-unavailable tests: `mvn verify` still passes. The live daemon ping runs only when `CLOUDFLOW_DOCKER_TESTS=true` and `/var/run/docker.sock` is readable. Simulator mode does not need a daemon.
 
 ## Deployment readiness
 

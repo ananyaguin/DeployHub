@@ -1,5 +1,6 @@
 package com.cloudflow.worker;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,10 @@ import com.github.dockerjava.api.model.HostConfig;
 import com.github.dockerjava.api.model.RestartPolicy;
 import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
+import com.github.dockerjava.core.DockerClientConfig;
 import com.github.dockerjava.core.command.PullImageResultCallback;
+import com.github.dockerjava.httpclient5.ApacheDockerHttpClient;
+import com.github.dockerjava.transport.DockerHttpClient;
 
 /**
  * Docker Engine API adapter. Host paths, host networking, and privileged mode are not accepted.
@@ -26,10 +30,20 @@ public final class DockerJavaEngine implements DockerEngine {
     private final DockerClient client;
 
     public DockerJavaEngine(String dockerHost) {
-        this(DockerClientBuilder.getInstance(DefaultDockerClientConfig.createDefaultConfigBuilder()
-                        .withDockerHost(dockerHost)
-                        .build())
-                .build());
+        this(open(dockerHost));
+    }
+
+    private static DockerClient open(String dockerHost) {
+        DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
+                .withDockerHost(dockerHost)
+                .build();
+        DockerHttpClient http = new ApacheDockerHttpClient.Builder()
+                .dockerHost(config.getDockerHost())
+                .sslConfig(config.getSSLConfig())
+                .connectionTimeout(Duration.ofSeconds(5))
+                .responseTimeout(Duration.ofSeconds(30))
+                .build();
+        return DockerClientBuilder.getInstance(config).withDockerHttpClient(http).build();
     }
 
     DockerJavaEngine(DockerClient client) {

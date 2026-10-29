@@ -51,7 +51,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 cp .env.example .env
 ```
 
-Export the backend variables from `.env.example` in the API shell. Replace the placeholder password, JWT secret, and worker token with local values. Do not commit `.env`.
+Put local values in `.env`. Spring Boot loads that file from the repository root, including when Maven runs from `backend/`. Do not commit `.env`.
 
 ```bash
 mvn -pl backend spring-boot:run

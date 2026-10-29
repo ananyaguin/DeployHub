@@ -22,14 +22,16 @@ public class MailConfig {
         JavaMailSenderImpl sender = new JavaMailSenderImpl();
         sender.setHost(mail.host());
         sender.setPort(mail.port());
-        if (!mail.username().isBlank()) {
+        boolean authenticate = !mail.username().isBlank();
+        if (authenticate) {
             sender.setUsername(mail.username());
             sender.setPassword(mail.password());
         }
         Properties properties = sender.getJavaMailProperties();
         properties.put("mail.transport.protocol", "smtp");
-        properties.put("mail.smtp.auth", Boolean.toString(!mail.username().isBlank()));
+        properties.put("mail.smtp.auth", Boolean.toString(authenticate));
         properties.put("mail.smtp.starttls.enable", "true");
+        properties.put("mail.smtp.starttls.required", Boolean.toString(authenticate));
         properties.put("mail.smtp.connectiontimeout", "5000");
         properties.put("mail.smtp.timeout", "5000");
         properties.put("mail.smtp.writetimeout", "5000");

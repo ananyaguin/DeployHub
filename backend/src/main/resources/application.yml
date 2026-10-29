@@ -9,38 +9,31 @@ server:
       enabled: false
 
 spring:
+  config:
+    import: optional:file:.env[.properties],optional:file:../.env[.properties]
   application:
     name: ${SPRING_APPLICATION_NAME:cloudflow-backend}
-
-  
   datasource:
-    url: jdbc:mysql://localhost:3306/deployhub
-    username: root
-    password: An@ny@613M
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     hikari:
-      connection-init-sql: "SET time_zone = '+00:00'"
-  
+      connection-init-sql: SET time_zone = '+00:00'
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: none
     properties:
       hibernate.jdbc.time_zone: UTC
-
   flyway:
     enabled: true
     locations: classpath:db/migration
     clean-disabled: true
     validate-on-migrate: true
-
   jackson:
     time-zone: UTC
-
   mvc:
     throw-exception-if-no-handler-found: true
-
   web:
     resources:
       add-mappings: false
@@ -72,20 +65,18 @@ cloudflow:
       secret: ${JWT_SECRET}
       expiration: ${JWT_EXPIRATION:15m}
     require-verified-email: ${REQUIRE_VERIFIED_EMAIL:true}
-    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5174}
+    cors-allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
     worker-token: ${WORKER_TOKEN:}
-
   mail:
-    host: ${SMTP_HOST:smtp.gmail.com}
+    host: ${SMTP_HOST:}
     port: ${SMTP_PORT:587}
     username: ${SMTP_USERNAME:}
     password: ${SMTP_PASSWORD:}
-    from: ${SMTP_FROM:${SMTP_USERNAME:no-reply@localhost}}
-    verification-url: ${MAIL_VERIFICATION_URL:http://localhost:5174/verify-email}
-    reset-url: ${MAIL_RESET_URL:http://localhost:5174/reset-password}
+    from: ${SMTP_FROM:no-reply@localhost}
+    verification-url: ${MAIL_VERIFICATION_URL:http://localhost:5173/verify-email}
+    reset-url: ${MAIL_RESET_URL:http://localhost:5173/reset-password}
     verification-ttl: ${MAIL_VERIFICATION_TTL:24h}
     reset-ttl: ${MAIL_RESET_TTL:30m}
-
   worker:
     heartbeat-timeout: ${WORKER_HEARTBEAT_TIMEOUT:30s}
     running-timeout: ${WORKER_RUNNING_TIMEOUT:2m}

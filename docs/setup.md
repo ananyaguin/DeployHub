@@ -110,11 +110,11 @@ docker run --rm -p 1025:1025 -p 8025:8025 mailhog/mailhog
 
 Then export `SMTP_HOST=127.0.0.1`, `SMTP_PORT=1025`, an empty `SMTP_USERNAME`, and `SMTP_FROM=no-reply@localhost`. Open `http://127.0.0.1:8025` to read the message. The API tests do not use this. They mock `JavaMailSender`.
 
-Production should set a real host, port 587 with STARTTLS, a mailbox user and password, and HTTPS frontend URLs. Do not commit those values. Rate-limit the public verification and reset endpoints at the reverse proxy, as described in `docs/security.md`.
+A provider such as Gmail uses `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, the mailbox as both `SMTP_USERNAME` and `SMTP_FROM`, and an app password in `SMTP_PASSWORD`. STARTTLS is required when a username is set. A local catcher with a blank username does not require STARTTLS. Production should use HTTPS frontend URLs. Do not commit those values. Rate-limit the public verification and reset endpoints at the reverse proxy, as described in `docs/security.md`.
 
 ## Environment
 
-Copy `.env.example` to `.env`. Real values stay in `.env` or the shell. `.env` is gitignored. Do not commit JWT secrets, database passwords, SMTP passwords, or worker tokens.
+Copy `.env.example` to `.env` at the repository root. `.env` is gitignored. Spring Boot loads it from the repository root and from the parent directory of `backend/`, so `mvn -pl backend spring-boot:run` picks it up without exporting variables in each terminal. Vite reads the same file. Do not commit JWT secrets, database passwords, SMTP passwords, or worker tokens.
 
 The API does not start unless these are set. `application.yml` has no defaults for them:
 
